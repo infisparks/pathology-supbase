@@ -1,0 +1,1127 @@
+"use client"
+
+import type React from "react"
+import { useEffect, useState, useMemo } from "react"
+import { supabase } from "@/lib/supabase"
+import {
+  useForm,
+  useFieldArray,
+  useWatch,
+  type SubmitHandler,
+  type FieldErrorsImpl,
+  type UseFormGetValues,
+  type UseFormSetValue,
+  type Control,
+  type UseFormRegister,
+} from "react-hook-form"
+import { FaEdit, FaTrash, FaRupeeSign, FaSave, FaPlus, FaPlusCircle, FaCopy, FaSyncAlt, FaCode } from "react-icons/fa"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Search, Plus, Edit } from "lucide-react"
+
+// ------------------------------------------------------------------
+// INTERFACES
+// ------------------------------------------------------------------
+export interface AgeRangeItem {
+  rangeKey: string
+  rangeValue: string
+}
+
+export interface Parameter {
+  name: string
+  unit: string
+  valueType: "text" | "number"
+  defaultValue?: string | number
+  formula?: string
+  iscomment?: boolean
+  range: {
+    male: AgeRangeItem[]
+    female: AgeRangeItem[]
+  }
+  suggestions?: {
+    description: string
+    shortName: string
+  }[]
+}
+
+// export interface Description { // Removed
+//   heading: string
+//   content: string
+// }
+
+export interface Subheading {
+  title: string
+  parameterNames: { name: string }[] // Changed from string[] to { name: string }[]
+}
+
+export interface BloodTestFormInputs {
+  testName: string
+  price: number
+  // descriptions?: Description[] // Removed as per provided Supabase schema
+  parameters: Parameter[]
+  subheadings: Subheading[]
+  isOutsource?: boolean
+}
+
+// TestData interface for Supabase, mapping to table columns
+export interface TestData {
+  id: number // Supabase primary key
+  testName: string // Maps to test_name
+  price: number
+  isOutsource: boolean // Maps to outsource
+  parameters: Parameter[] // Maps to parameter (json)
+  subheadings: Subheading[] // Maps to sub_heading (json)
+  // descriptions?: Description[] // Removed as per provided Supabase schema
+  created_at: string // Supabase column name
+  // updated_at?: string // Removed as per provided Supabase schema
+}
+
+// Helper to safely fetch error messages
+function getFieldErrorMessage(errors: any, path: string[]): string | undefined {
+  let current = errors
+  for (const p of path) {
+    if (!current) return undefined
+    current = current[p]
+  }
+  return typeof current?.message === "string" ? current.message : undefined
+}
+
+// ------------------------------------------------------------------
+// PARAMETER EDITOR
+// ------------------------------------------------------------------
+interface ParameterEditorProps {
+  index: number
+  control: Control<BloodTestFormInputs>
+  register: UseFormRegister<BloodTestFormInputs>
+  errors: FieldErrorsImpl<BloodTestFormInputs>
+  remove: (index: number) => void
+}
+
+const ParameterEditor: React.FC<ParameterEditorProps> = ({ index, control, register, errors, remove }) => {
+  const maleRangesArray = useFieldArray({
+    control,
+    name: `parameters.${index}.range.male`,
+  })
+  const femaleRangesArray = useFieldArray({
+    control,
+    name: `parameters.${index}.range.female`,
+  })
+  const suggestionsArray = useFieldArray({
+    control,
+    name: `parameters.${index}.suggestions`,
+  })
+
+  const paramNameErr = getFieldErrorMessage(errors, ["parameters", index.toString(), "name"])
+  const paramUnitErr = getFieldErrorMessage(errors, ["parameters", index.toString(), "unit"])
+  const paramValueTypeErr = getFieldErrorMessage(errors, ["parameters", index.toString(), "valueType"])
+
+  return (
+    <div className="border p-4 rounded mb-4 bg-gray-50">
+      <div className="flex justify-between items-center">
+        <h3 className="text-sm font-semibold">Parameter #{index + 1}</h3>
+        <button type="button" onClick={() => remove(index)} className="text-red-500 hover:text-red-700">
+          <FaTrash />
+        </button>
+      </div>
+
+      {/* Parameter Name & Unit */}
+      <div className="mt-2">
+        <label className="block text-xs">Parameter Name</label>
+        <input
+          type="text"
+          {...register(`parameters.${index}.name`, { required: "Required" })}
+          className="w-full border rounded px-2 py-1"
+        />
+        {paramNameErr && <p className="text-red-500 text-xs">{paramNameErr}</p>}
+      </div>
+      <div className="mt-2">
+        <label className="block text-xs">Unit</label>
+        <input type="text" {...register(`parameters.${index}.unit`)} className="w-full border rounded px-2 py-1" />
+        {paramUnitErr && <p className="text-red-500 text-xs">{paramUnitErr}</p>}
+      </div>
+
+      {/* Value Type */}
+      <div className="mt-2">
+        <label className="block text-xs">Value Type</label>
+        <select
+          {...register(`parameters.${index}.valueType`, { required: "Required" })}
+          className="w-full border rounded px-2 py-1"
+        >
+          <option value="">Select Value Type</option>
+          <option value="text">Text</option>
+          <option value="number">Number</option>
+        </select>
+        {paramValueTypeErr && <p className="text-red-500 text-xs">{paramValueTypeErr}</p>}
+      </div>
+
+      {/* Formula (optional) */}
+      <div className="mt-2">
+        <label className="block text-xs">Formula (optional)</label>
+        <input
+          type="text"
+          {...register(`parameters.${index}.formula`)}
+          placeholder="e.g. TOTAL BILLIRUBIN - DIRECT BILLIRUBIN"
+          className="w-full border rounded px-2 py-1"
+        />
+      </div>
+
+      {/* Default Value (optional) */}
+      <div className="mt-2">
+        <label className="block text-xs">Default Value</label>
+        <input
+          type="text"
+          {...register(`parameters.${index}.defaultValue`)}
+          className="w-full border rounded px-2 py-1"
+          placeholder="e.g. 0 or N/A"
+        />
+      </div>
+
+      {/* Comment checkbox */}
+      <div className="mt-2 flex items-center space-x-2">
+        <input type="checkbox" {...register(`parameters.${index}.iscomment`)} id={`comment-${index}`} />
+        <label htmlFor={`comment-${index}`} className="text-xs">
+          This row is a comment (store <code>iscomment: true</code>)
+        </label>
+      </div>
+
+      {/* Suggestions */}
+      <div className="mt-4">
+        <h4 className="text-xs font-medium">Suggestions</h4>
+        {suggestionsArray.fields.map((field, sIndex) => (
+          <div key={field.id} className="flex items-center space-x-2 mt-1">
+            <input
+              type="text"
+              placeholder="Full suggestion text"
+              {...register(`parameters.${index}.suggestions.${sIndex}.description`, { required: "Required" })}
+              className="w-2/3 border rounded px-2 py-1"
+            />
+            <input
+              type="text"
+              placeholder="Short code"
+              {...register(`parameters.${index}.suggestions.${sIndex}.shortName`, { required: "Required" })}
+              className="w-1/3 border rounded px-2 py-1"
+            />
+            <button
+              type="button"
+              onClick={() => suggestionsArray.remove(sIndex)}
+              className="text-red-500 hover:text-red-700"
+            >
+              <FaTrash />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => suggestionsArray.append({ description: "", shortName: "" })}
+          className="mt-2 inline-flex items-center px-3 py-1 border border-green-600 text-green-600 rounded hover:bg-green-50"
+        >
+          <FaPlusCircle className="mr-1" /> Add Suggestion
+        </button>
+      </div>
+
+      {/* Male Ranges */}
+      <div className="mt-4">
+        <h4 className="text-xs font-medium">Male Ranges</h4>
+        {maleRangesArray.fields.map((field, mIndex) => {
+          const keyErr = getFieldErrorMessage(errors, [
+            "parameters",
+            index.toString(),
+            "range",
+            "male",
+            mIndex.toString(),
+            "rangeKey",
+          ])
+          const valErr = getFieldErrorMessage(errors, [
+            "parameters",
+            index.toString(),
+            "range",
+            "male",
+            mIndex.toString(),
+            "rangeValue",
+          ])
+          return (
+            <div key={field.id} className="flex items-center space-x-2 mt-1">
+              <input
+                type="text"
+                {...register(`parameters.${index}.range.male.${mIndex}.rangeKey`)}
+                className="w-1/2 border rounded px-2 py-1"
+              />
+              <input
+                type="text"
+                {...register(`parameters.${index}.range.male.${mIndex}.rangeValue`)}
+                className="w-1/2 border rounded px-2 py-1"
+              />
+              <button
+                type="button"
+                onClick={() => maleRangesArray.remove(mIndex)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <FaTrash />
+              </button>
+              {keyErr && <p className="text-red-500 text-xs w-full">{keyErr}</p>}
+              {valErr && <p className="text-red-500 text-xs w-full">{valErr}</p>}
+            </div>
+          )
+        })}
+        <button
+          type="button"
+          onClick={() => maleRangesArray.append({ rangeKey: "", rangeValue: "" })}
+          className="mt-2 inline-flex items-center px-2 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
+        >
+          <FaPlus className="mr-1" /> Add Male Range
+        </button>
+      </div>
+
+      {/* Female Ranges */}
+      <div className="mt-4">
+        <h4 className="text-xs font-medium">Female Ranges</h4>
+        {femaleRangesArray.fields.map((field, fIndex) => {
+          const keyErr = getFieldErrorMessage(errors, [
+            "parameters",
+            index.toString(),
+            "range",
+            "female",
+            fIndex.toString(),
+            "rangeKey",
+          ])
+          const valErr = getFieldErrorMessage(errors, [
+            "parameters",
+            index.toString(),
+            "range",
+            "female",
+            fIndex.toString(),
+            "rangeValue",
+          ])
+          return (
+            <div key={field.id} className="flex items-center space-x-2 mt-1">
+              <input
+                type="text"
+                {...register(`parameters.${index}.range.female.${fIndex}.rangeKey`)}
+                className="w-1/2 border rounded px-2 py-1"
+              />
+              <input
+                type="text"
+                {...register(`parameters.${index}.range.female.${fIndex}.rangeValue`)}
+                className="w-1/2 border rounded px-2 py-1"
+              />
+              <button
+                type="button"
+                onClick={() => femaleRangesArray.remove(fIndex)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <FaTrash />
+              </button>
+              {keyErr && <p className="text-red-500 text-xs w-full">{keyErr}</p>}
+              {valErr && <p className="text-red-500 text-xs w-full">{valErr}</p>}
+            </div>
+          )
+        })}
+        <button
+          type="button"
+          onClick={() => femaleRangesArray.append({ rangeKey: "", rangeValue: "" })}
+          className="mt-2 inline-flex items-center px-2 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
+        >
+          <FaPlus className="mr-1" /> Add Female Range
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------
+// SUBHEADING EDITOR
+// ------------------------------------------------------------------
+interface SubheadingEditorProps {
+  index: number
+  control: Control<BloodTestFormInputs>
+  register: UseFormRegister<BloodTestFormInputs>
+  errors: FieldErrorsImpl<BloodTestFormInputs>
+  remove: (index: number) => void
+  getValues: UseFormGetValues<BloodTestFormInputs>
+  setValue: UseFormSetValue<BloodTestFormInputs>
+}
+
+const SubheadingEditor: React.FC<SubheadingEditorProps> = ({
+  index,
+  control,
+  register,
+  errors,
+  remove,
+  getValues,
+  setValue,
+}) => {
+  const paramNamesArray = useFieldArray({
+    control,
+    name: `subheadings.${index}.parameterNames`,
+  })
+  const globalParameters = useWatch({ control, name: "parameters" }) || []
+  const subheadingTitleErr = getFieldErrorMessage(errors, ["subheadings", index.toString(), "title"])
+
+  // avoid duplicate parameter usage across subheadings
+  const handleParameterChange = (pIndex: number, newValue: string) => {
+    if (!newValue) return
+    const allSubheadings = getValues("subheadings") || []
+    for (let shIndex = 0; shIndex < allSubheadings.length; shIndex++) {
+      if (shIndex === index) continue
+      // Map to string array for comparison
+      const paramNames = allSubheadings[shIndex]?.parameterNames.map((p) => p.name) || []
+      if (paramNames.includes(newValue)) {
+        alert(`Parameter "${newValue}" is already used in another subheading!`)
+        setValue(`subheadings.${index}.parameterNames.${pIndex}.name`, "") // Corrected path
+        return
+      }
+    }
+  }
+
+  return (
+    <div className="border p-4 rounded mb-4 bg-gray-100">
+      <div className="flex justify-between items-center">
+        <h3 className="text-sm font-semibold">Subheading #{index + 1}</h3>
+        <button type="button" onClick={() => remove(index)} className="text-red-500 hover:text-red-700">
+          <FaTrash />
+        </button>
+      </div>
+
+      {/* Title */}
+      <div className="mt-2">
+        <label className="block text-xs">Subheading Title</label>
+        <input
+          type="text"
+          {...register(`subheadings.${index}.title`, { required: "Required" })}
+          className="w-full border rounded px-2 py-1"
+          placeholder="e.g. RBC"
+        />
+        {subheadingTitleErr && <p className="text-red-500 text-xs">{subheadingTitleErr}</p>}
+      </div>
+
+      {/* Parameter Names */}
+      <div className="mt-2">
+        <h4 className="text-xs font-medium">Select Parameters</h4>
+        {paramNamesArray.fields.map((field, pIndex) => {
+          const paramNameErr = getFieldErrorMessage(errors, [
+            "subheadings",
+            index.toString(),
+            "parameterNames",
+            pIndex.toString(),
+            "name", // Corrected path
+          ])
+          return (
+            <div key={field.id} className="flex items-center space-x-2 mt-1">
+              <select
+                {...register(`subheadings.${index}.parameterNames.${pIndex}.name`, {
+                  // Corrected path
+                  required: "Required",
+                  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => handleParameterChange(pIndex, e.target.value),
+                })}
+                className="w-full border rounded px-2 py-1"
+                value={field.name} // Added to display current value
+              >
+                <option value="">Select Parameter</option>
+                {globalParameters.map((param: { name: string }, idx: number) => (
+                  <option key={idx} value={param.name}>
+                    {param.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => paramNamesArray.remove(pIndex)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <FaTrash />
+              </button>
+              {paramNameErr && <p className="text-red-500 text-xs w-full">{paramNameErr}</p>}
+            </div>
+          )
+        })}
+        <button
+          type="button"
+          onClick={() => paramNamesArray.append({ name: "" })} // Changed to append object
+          className="mt-2 inline-flex items-center px-2 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
+        >
+          <FaPlus className="mr-1" /> Add Parameter
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------
+// DESCRIPTION EDITOR (Removed as per provided Supabase schema)
+// ------------------------------------------------------------------
+// interface DescriptionEditorProps {
+//   index: number
+//   control: Control<BloodTestFormInputs>
+//   register: UseFormRegister<BloodTestFormInputs>
+//   errors: FieldErrorsImpl<BloodTestFormInputs>
+//   remove: (index: number) => void
+// }
+
+// const DescriptionEditor: React.FC<DescriptionEditorProps> = ({ index, control, register, errors, remove }) => {
+//   const headingErr = getFieldErrorMessage(errors, ["descriptions", index.toString(), "heading"])
+//   const contentErr = getFieldErrorMessage(errors, ["descriptions", index.toString(), "content"])
+
+//   return (
+//     <div className="flex space-x-2 mt-2">
+//       <input
+//         {...register(`descriptions.${index}.heading`, { required: "Required" })}
+//         placeholder="Heading"
+//         className="w-1/3 border rounded px-2 py-1"
+//       />
+//       <textarea
+//         {...register(`descriptions.${index}.content`, { required: "Required" })}
+//         placeholder="Content"
+//         className="w-2/3 border rounded px-2 py-1"
+//       />
+//       <button type="button" onClick={() => remove(index)} className="text-red-500 hover:text-red-700">
+//         <FaTrash />
+//       </button>
+//       {headingErr && <p className="text-red-500 text-xs w-full">{headingErr}</p>}
+//       {contentErr && <p className="text-red-500 text-xs w-full">{contentErr}</p>}
+//     </div>
+//   )
+// }
+
+// ------------------------------------------------------------------
+// TEST MODAL (Create & Edit)
+// ------------------------------------------------------------------
+interface TestModalProps {
+  testData?: TestData
+  onClose: () => void
+  onTestUpdated: () => void
+}
+
+const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated }) => {
+  const defaultValues = useMemo<BloodTestFormInputs>(
+    () =>
+      testData
+        ? {
+            testName: testData.testName,
+            price: testData.price,
+            // descriptions: testData.descriptions || [], // Removed as per provided Supabase schema
+            parameters: testData.parameters,
+            subheadings: testData.subheadings,
+            isOutsource: testData.isOutsource || false,
+          }
+        : {
+            testName: "",
+            price: 0,
+            // descriptions: [], // Removed as per provided Supabase schema
+            parameters: [
+              {
+                name: "",
+                unit: "",
+                valueType: "text",
+                formula: "",
+                iscomment: false,
+                suggestions: [],
+                range: {
+                  male: [{ rangeKey: "", rangeValue: "" }],
+                  female: [{ rangeKey: "", rangeValue: "" }],
+                },
+              },
+            ],
+            subheadings: [],
+            isOutsource: false,
+          },
+    [testData],
+  )
+
+  const {
+    register,
+    handleSubmit,
+    control,
+    formState: { errors },
+    getValues,
+    setValue,
+    reset,
+  } = useForm<BloodTestFormInputs>({ defaultValues })
+
+  const paramFields = useFieldArray({ control, name: "parameters" })
+  const subheadingFields = useFieldArray({ control, name: "subheadings" })
+  // const descFields = useFieldArray({ control, name: "descriptions" }) // Removed
+
+  useEffect(() => {
+    console.log("TestModal: paramFields.fields.length changed:", paramFields.fields.length)
+    if (paramFields.fields.length === 0) {
+      setValue("isOutsource", true)
+      console.log("TestModal: Setting isOutsource to true because no parameters.")
+    }
+  }, [paramFields.fields.length, setValue])
+
+  const testNameErr = getFieldErrorMessage(errors, ["testName"])
+  const testPriceErr = getFieldErrorMessage(errors, ["price"])
+
+  // JSON editor toggle
+  const [isJsonEditor, setIsJsonEditor] = useState(false)
+  const [jsonContent, setJsonContent] = useState("")
+
+  useEffect(() => {
+    console.log("TestModal: defaultValues changed, updating jsonContent.")
+    setJsonContent(JSON.stringify(getValues(), null, 2)) // Use getValues() to get current form state
+  }, [getValues, testData]) // Depend on getValues and testData to ensure fresh content
+
+  const onSubmit: SubmitHandler<BloodTestFormInputs> = async (data) => {
+    console.log("TestModal: onSubmit triggered with data:", data)
+    try {
+      const payload = {
+        test_name: data.testName,
+        price: data.price,
+        outsource: data.isOutsource,
+        parameter: data.parameters,
+        sub_heading: data.subheadings.map((sh) => ({
+          // Transform back to string[] for Supabase
+          title: sh.title,
+          parameterNames: sh.parameterNames.map((p) => p.name),
+        })),
+        // descriptions: data.descriptions, // Removed
+      }
+      console.log("TestModal: Payload for Supabase:", payload)
+
+      if (testData) {
+        console.log("TestModal: Updating existing test with ID:", testData.id)
+        const { error } = await supabase
+          .from("blood_test")
+          .update({ ...payload })
+          .eq("id", testData.id)
+        if (error) throw error
+        alert("Test updated successfully!")
+        console.log("TestModal: Test updated successfully!")
+      } else {
+        console.log("TestModal: Creating new test.")
+        const { error } = await supabase.from("blood_test").insert({ ...payload })
+        if (error) throw error
+        alert("Test created successfully!")
+        console.log("TestModal: Test created successfully!")
+      }
+      onTestUpdated()
+      onClose()
+    } catch (err: any) {
+      console.error("TestModal: Error saving test:", err.message)
+      alert(`Error saving test: ${err.message}`)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!testData) return
+    if (!window.confirm("Delete this test?")) return
+    console.log("TestModal: Attempting to delete test with ID:", testData.id)
+    try {
+      const { error } = await supabase.from("blood_test").delete().eq("id", testData.id)
+      if (error) throw error
+      alert("Deleted!")
+      console.log("TestModal: Test deleted successfully!")
+      onTestUpdated()
+      onClose()
+    } catch (err: any) {
+      console.error("TestModal: Error deleting test:", err.message)
+      alert(`Error deleting test: ${err.message}`)
+    }
+  }
+
+  // JSON-mode save
+  const handleSaveJson = async () => {
+    console.log("TestModal: handleSaveJson triggered.")
+    try {
+      const parsed = JSON.parse(jsonContent)
+      console.log("TestModal: Parsed JSON content:", parsed)
+
+      // Transform for Supabase
+      const transformedSubheadings = parsed.subheadings.map((sh: any) => ({
+        title: sh.title,
+        parameterNames: sh.parameterNames.map((p: any) => p.name),
+      }))
+
+      const payload = {
+        test_name: parsed.testName,
+        price: parsed.price,
+        outsource: parsed.isOutsource,
+        parameter: parsed.parameters,
+        sub_heading: transformedSubheadings,
+        // descriptions: parsed.descriptions, // Removed
+      }
+      console.log("TestModal: Payload for Supabase from JSON:", payload)
+
+      if (testData) {
+        console.log("TestModal: Updating existing test from JSON with ID:", testData.id)
+        const { error } = await supabase
+          .from("blood_test")
+          .update({ ...payload })
+          .eq("id", testData.id)
+        if (error) throw error
+      } else {
+        console.log("TestModal: Creating new test from JSON.")
+        const { error } = await supabase.from("blood_test").insert({ ...payload })
+        if (error) throw error
+      }
+      alert("Saved!")
+      console.log("TestModal: Test saved from JSON successfully!")
+      onTestUpdated()
+      onClose()
+    } catch (e: any) {
+      console.error("TestModal: Invalid JSON or error saving from JSON:", e)
+      alert("Invalid JSON or error saving: " + e.message)
+    }
+  }
+
+  const handleSwitchToForm = () => {
+    console.log("TestModal: Switching to Form Editor.")
+    try {
+      const parsedJson = JSON.parse(jsonContent)
+      // Transform subheadings from string[] (if coming from old JSON) to { name: string }[] for form
+      const transformedSubheadings = parsedJson.subheadings.map((sh: any) => ({
+        title: sh.title,
+        parameterNames: (sh.parameterNames || []).map((name: string | { name: string }) =>
+          typeof name === "string" ? { name } : name,
+        ),
+      }))
+      reset({ ...parsedJson, subheadings: transformedSubheadings })
+      setIsJsonEditor(false)
+      console.log("TestModal: Successfully switched to Form Editor.")
+    } catch (e: any) {
+      console.error("TestModal: Error switching to Form Editor:", e)
+      alert("Invalid JSON – can’t switch." + e.message)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+      <div className="bg-white p-6 rounded-lg w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold flex items-center">
+            {testData ? (
+              <>
+                <FaEdit className="mr-2" /> Edit Blood Test
+              </>
+            ) : (
+              <>
+                <FaPlusCircle className="mr-2" /> Create New Blood Test
+              </>
+            )}
+          </h2>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-800">
+            Close
+          </button>
+        </div>
+
+        {/* Editor-mode toggle */}
+        <div className="flex justify-end mb-4">
+          {isJsonEditor ? (
+            <button
+              onClick={handleSwitchToForm}
+              className="inline-flex items-center px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 mr-2"
+            >
+              <FaSyncAlt className="mr-1" /> Switch to Form Editor
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setJsonContent(JSON.stringify(getValues(), null, 2))
+                setIsJsonEditor(true)
+              }}
+              className="inline-flex items-center px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 mr-2"
+            >
+              <FaCode className="mr-1" /> Switch to JSON Editor
+            </button>
+          )}
+          {isJsonEditor && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(jsonContent)
+                alert("JSON copied!")
+              }}
+              className="inline-flex items-center px-3 py-1 border border-green-600 text-green-600 rounded hover:bg-green-50"
+            >
+              <FaCopy className="mr-1" /> Copy JSON
+            </button>
+          )}
+        </div>
+
+        {isJsonEditor ? (
+          /* JSON editor */
+          <>
+            <textarea
+              value={jsonContent}
+              onChange={(e) => setJsonContent(e.target.value)}
+              className="w-full h-80 border rounded px-3 py-2 font-mono"
+            />
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={handleSaveJson}
+                className="inline-flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                <FaSave className="mr-1" /> Save JSON
+              </button>
+            </div>
+          </>
+        ) : (
+          /* FORM mode */
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {/* Test Name */}
+            <div>
+              <label className="block text-sm font-medium">Test Name</label>
+              <input
+                type="text"
+                {...register("testName", { required: "Test name is required" })}
+                className="w-full border rounded px-3 py-2"
+              />
+              {testNameErr && <p className="text-red-500 text-xs">{testNameErr}</p>}
+            </div>
+            {/* Price */}
+            <div>
+              <label className="block text-sm font-medium">
+                Price (Rs.) <FaRupeeSign className="inline-block text-green-600" />
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                {...register("price", {
+                  required: "Price is required",
+                  valueAsNumber: true,
+                })}
+                className="w-full border rounded px-3 py-2"
+              />
+              {testPriceErr && <p className="text-red-500 text-xs">{testPriceErr}</p>}
+            </div>
+            {/* Outsource */}
+            <div>
+              <label className="block text-sm font-medium">
+                Outsource Test?
+                <input
+                  type="checkbox"
+                  {...register("isOutsource")}
+                  className="ml-2"
+                  defaultChecked={!!defaultValues.isOutsource}
+                />
+              </label>
+            </div>
+            {/* Parameters */}
+            <div>
+              <label className="block text-sm font-medium">Global Parameters</label>
+              {paramFields.fields.map((field, idx) => (
+                <ParameterEditor
+                  key={field.id}
+                  index={idx}
+                  control={control}
+                  register={register}
+                  errors={errors as FieldErrorsImpl<any>}
+                  remove={paramFields.remove}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={() =>
+                  paramFields.append({
+                    name: "",
+                    unit: "",
+                    valueType: "text",
+                    formula: "",
+                    iscomment: false,
+                    range: {
+                      male: [{ rangeKey: "", rangeValue: "" }],
+                      female: [{ rangeKey: "", rangeValue: "" }],
+                    },
+                    suggestions: [],
+                  })
+                }
+                className="mt-2 inline-flex items-center px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
+              >
+                <FaPlus className="mr-1" /> Add Global Parameter
+              </button>
+            </div>
+
+            {/* Subheadings */}
+            <div>
+              <label className="block text-sm font-medium">Subheadings</label>
+              <div className="space-y-4">
+                {subheadingFields.fields.map((field, idx) => (
+                  <SubheadingEditor
+                    key={field.id}
+                    index={idx}
+                    control={control}
+                    register={register}
+                    errors={errors as FieldErrorsImpl<any>}
+                    remove={subheadingFields.remove}
+                    getValues={getValues}
+                    setValue={setValue}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => subheadingFields.append({ title: "", parameterNames: [] })}
+                className="mt-2 inline-flex items-center px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
+              >
+                <FaPlus className="mr-1" /> Add Subheading
+              </button>
+            </div>
+
+            {/* Descriptions (if you add this column to Supabase) */}
+            {/* <div>
+              <label className="block text-sm font-medium">Test Descriptions</label>
+              {descFields.fields.map((field, dIdx) => (
+                <DescriptionEditor
+                  key={field.id}
+                  index={dIdx}
+                  control={control}
+                  register={register}
+                  errors={errors as FieldErrorsImpl<any>}
+                  remove={descFields.remove}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={() => descFields.append({ heading: "", content: "" })}
+                className="mt-2 inline-flex items-center px-3 py-1 border border-green-600 text-green-600 rounded hover:bg-green-50"
+              >
+                <FaPlusCircle className="mr-1" /> Add Description
+              </button>
+            </div> */}
+
+            {/* Save / delete */}
+            <div className="flex justify-between items-center mt-4">
+              {testData && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="inline-flex items-center px-3 py-1 border border-red-600 text-red-600 rounded hover:bg-red-50"
+                >
+                  <FaTrash className="mr-1" /> Delete Test
+                </button>
+              )}
+              <button
+                type="submit"
+                className="inline-flex items-center px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                <FaSave className="mr-1" />
+                {testData ? "Save Changes" : "Create Test"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------
+// MAIN PAGE COMPONENT
+// ------------------------------------------------------------------
+export default function BloodTestsPage() {
+  const [bloodTests, setBloodTests] = useState<TestData[]>([])
+  const [filteredTests, setFilteredTests] = useState<TestData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [showModal, setShowModal] = useState(false)
+  const [selectedTest, setSelectedTest] = useState<TestData | null>(null)
+
+  useEffect(() => {
+    console.log("BloodTestsPage: Initial fetch triggered.")
+    fetchBloodTests()
+  }, [])
+
+  useEffect(() => {
+    console.log("BloodTestsPage: Search term or bloodTests changed. Filtering data.")
+    if (searchTerm.trim()) {
+      const filtered = bloodTests.filter((test) => test.testName.toLowerCase().includes(searchTerm.toLowerCase()))
+      setFilteredTests(filtered)
+      console.log("BloodTestsPage: Filtered tests count:", filtered.length)
+    } else {
+      setFilteredTests(bloodTests)
+      console.log("BloodTestsPage: No search term, showing all tests. Count:", bloodTests.length)
+    }
+  }, [searchTerm, bloodTests])
+
+  const fetchBloodTests = async () => {
+    console.log("BloodTestsPage: Attempting to fetch blood tests from Supabase...")
+    try {
+      const { data, error } = await supabase
+        .from("blood_test")
+        .select("id, test_name, price, outsource, parameter, sub_heading, created_at") // Columns based on your schema
+        .order("test_name")
+
+      if (error) {
+        console.error("BloodTestsPage: Supabase fetch error:", error)
+        throw error
+      }
+
+      console.log("BloodTestsPage: Supabase data received:", data)
+
+      // Map Supabase data to TestData interface, transforming subheadings
+      const mappedData: TestData[] = (data || []).map((item: any) => ({
+        id: item.id,
+        testName: item.test_name,
+        price: item.price,
+        isOutsource: item.outsource,
+        parameters: item.parameter || [], // Ensure it's an array, default to empty
+        subheadings: (item.sub_heading || []).map((sh: any) => ({
+          // Transform string[] to { name: string }[]
+          title: sh.title,
+          parameterNames: (sh.parameterNames || []).map((name: string) => ({ name })),
+        })),
+        created_at: item.created_at,
+      }))
+
+      console.log("BloodTestsPage: Mapped data:", mappedData)
+      setBloodTests(mappedData)
+      setFilteredTests(mappedData) // Initialize filteredTests with all data
+      console.log("BloodTestsPage: Data loaded successfully. Total tests:", mappedData.length)
+    } catch (error) {
+      console.error("BloodTestsPage: Error fetching blood tests:", error)
+    } finally {
+      setLoading(false)
+      console.log("BloodTestsPage: Loading set to false.")
+    }
+  }
+
+  const openEdit = (test: TestData) => {
+    console.log("BloodTestsPage: Opening edit modal for test:", test.id)
+    setSelectedTest(test)
+    setShowModal(true)
+  }
+
+  const openCreate = () => {
+    console.log("BloodTestsPage: Opening create modal.")
+    setSelectedTest(null)
+    setShowModal(true)
+  }
+
+  const closeModal = () => {
+    console.log("BloodTestsPage: Closing modal. Re-fetching data.")
+    setShowModal(false)
+    setSelectedTest(null)
+    fetchBloodTests() // Refresh data after modal closes
+  }
+
+  if (loading) {
+    console.log("BloodTestsPage: Displaying loading state.")
+    return (
+      <div className="flex h-screen bg-gray-50">
+        <div className="flex-1 p-8">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+            <div className="h-64 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  console.log("BloodTestsPage: Rendering main content with filteredTests:", filteredTests.length)
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <div className="flex-1 overflow-auto">
+        <div className="p-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Blood Tests</h1>
+            <p className="text-gray-600 mt-2">Manage all available blood tests and their pricing</p>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Test Database</CardTitle>
+                <div className="flex items-center space-x-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      placeholder="Search tests..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 w-64"
+                    />
+                  </div>
+                  <Badge variant="outline">{filteredTests.length} tests</Badge>
+                  <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Test
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Test Name</TableHead>
+                      <TableHead>Price (₹)</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Parameters</TableHead>
+                      <TableHead>Subheadings</TableHead>
+                      {/* <TableHead>Descriptions</TableHead> */}
+                      <TableHead>Created</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTests.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          {searchTerm ? "No tests found matching your search." : "No blood tests available."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredTests.map((test) => (
+                        <TableRow key={test.id}>
+                          <TableCell className="font-medium">{test.testName}</TableCell>
+                          <TableCell>
+                            <span className="font-medium">₹{test.price}</span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={test.isOutsource ? "destructive" : "default"}>
+                              {test.isOutsource ? "Outsource" : "InHouse"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {test.parameters && Array.isArray(test.parameters) ? (
+                              <div className="text-sm text-gray-600">{test.parameters.length} parameters</div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {test.subheadings && Array.isArray(test.subheadings) ? (
+                              <div className="text-sm text-gray-600">{test.subheadings.length} subheadings</div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          {/* <TableCell>
+                            {test.descriptions && Array.isArray(test.descriptions) ? (
+                              <div className="text-sm text-gray-600">{test.descriptions.length} descriptions</div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell> */}
+                          <TableCell>
+                            <div className="text-sm text-gray-600">
+                              {new Date(test.created_at).toLocaleDateString("en-IN")}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              <Button variant="ghost" size="sm" onClick={() => openEdit(test)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {showModal && <TestModal testData={selectedTest || undefined} onClose={closeModal} onTestUpdated={closeModal} />}
+    </div>
+  )
+}
