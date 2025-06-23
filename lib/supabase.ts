@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Use environment variables for Supabase configuration
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lab.infispark.in';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc0ODg1NzU2MCwiZXhwIjo0OTA0NTMxMTYwLCJyb2xlIjoiYW5vbiJ9.oLbBvtRJHTAGl-6PvyfQ_nilkaJi2Nnk8PGzAKkoz50"
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lab.infispark.in';
+// const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc0ODg1NzU2MCwiZXhwIjo0OTA0NTMxMTYwLCJyb2xlIjoiYW5vbiJ9.oLbBvtRJHTAGl-6PvyfQ_nilkaJi2Nnk8PGzAKkoz50"
+const supabaseUrl ='https://lab.infispark.in';
+const supabaseKey =  "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc0ODg1NzU2MCwiZXhwIjo0OTA0NTMxMTYwLCJyb2xlIjoiYW5vbiJ9.oLbBvtRJHTAGl-6PvyfQ_nilkaJi2Nnk8PGzAKkoz50"
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
