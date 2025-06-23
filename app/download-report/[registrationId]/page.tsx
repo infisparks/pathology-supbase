@@ -134,11 +134,11 @@ function DownloadReport() {
           .from("registration")
           .select(
             `
-          *,
-          patientdetial (
-            id, name, age, gender, patient_id, number, total_day, title
-          )
-        `,
+        *,
+        patientdetial (
+          id, name, age, gender, patient_id, number, total_day, title
+        )
+      `,
           )
           .eq("id", registrationId)
           .single()
@@ -224,8 +224,8 @@ function DownloadReport() {
           .from("registration")
           .select(
             `
-          id, registration_time, bloodtest_detail, bloodtest_data
-        `,
+        id, registration_time, bloodtest_detail, bloodtest_data
+      `,
           )
           .eq("patient_id", patientdetial.id) // FIX: Use patientdetial.id (the bigint)
           .order("registration_time", { ascending: true }) // Order by date for comparison
@@ -625,7 +625,10 @@ function DownloadReport() {
         contentType: "application/pdf",
       })
 
-      if (uploadError) throw uploadData
+      if (uploadError) {
+        console.error("Supabase upload error:", uploadError)
+        throw new Error(`Failed to upload file to Supabase: ${uploadError.message}`)
+      }
 
       const { data: publicUrlData } = supabase.storage.from("reports").getPublicUrl(filename)
       const url = publicUrlData.publicUrl
@@ -728,11 +731,11 @@ function DownloadReport() {
                   {patientData.name}
                 </div>
                 <div>
-  <span className="font-medium">Patient ID:</span>{" "}
-  {patientData.patientId && patientData.registration_id
-    ? `${patientData.patientId}-${patientData.registration_id}`
-    : patientData.patientId || patientData.registration_id || "-"}
-</div>
+                  <span className="font-medium">Patient ID:</span>{" "}
+                  {patientData.patientId && patientData.registration_id
+                    ? `${patientData.patientId}-${patientData.registration_id}`
+                    : patientData.patientId || patientData.registration_id || "-"}
+                </div>
                 <div>
                   <span className="font-medium">Age/Gender:</span> {patientData.age}{" "}
                   {patientData.total_day ? "Days" : "Years"} / {patientData.gender}

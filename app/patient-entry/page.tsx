@@ -41,13 +41,11 @@ function time12ToISO(date: string, time12: string) {
 
 async function generatePatientId() {
   const now = new Date()
-  const YY = String(now.getFullYear()).slice(-2)           // Last 2 digits of year
-  const MM = String(now.getMonth() + 1).padStart(2, "0")   // Month (01-12)
-  const DD = String(now.getDate()).padStart(2, "0")        // Day (01-31)
+  const YY = String(now.getFullYear()).slice(-2) // Last 2 digits of year
+  const MM = String(now.getMonth() + 1).padStart(2, "0") // Month (01-12)
+  const DD = String(now.getDate()).padStart(2, "0") // Day (01-31)
   return `${YY}${MM}${DD}`
 }
-
-
 
 /**
  * -----------------------------
@@ -371,20 +369,68 @@ export default function PatientEntryForm() {
       // Calculate total amount paid for legacy fields
       const totalAmountPaid = data.paymentEntries.reduce((sum, entry) => sum + entry.amount, 0)
 
-      const { error: regErr } = await supabase.from(TABLE.REGISTRATION).insert({
-        patient_id: patientDatabaseId, // Use the correct patient database ID
-        amount_paid: totalAmountPaid, // Legacy field - sum of all payments
-        visit_type: data.visitType,
-        registration_time: isoTime,
-        samplecollected_time: isoTime,
-        discount_amount: discountAmount,
-        hospital_name: data.hospitalName,
-        payment_mode: data.paymentEntries.length > 0 ? data.paymentEntries[0].paymentMode : "online", // Legacy field
-        bloodtest_data: data.bloodTests,
-        amount_paid_history: paymentHistoryData, 
-        doctor_name: data.doctorName,// ONLY save to this column
-      })
+      const { data: regData, error: regErr } = await supabase
+        .from(TABLE.REGISTRATION)
+        .insert({
+          patient_id: patientDatabaseId, // Use the correct patient database ID
+          amount_paid: totalAmountPaid, // Legacy field - sum of all payments
+          visit_type: data.visitType,
+          registration_time: isoTime,
+          samplecollected_time: isoTime,
+          discount_amount: discountAmount,
+          hospital_name: data.hospitalName,
+          payment_mode: data.paymentEntries.length > 0 ? data.paymentEntries[0].paymentMode : "online", // Legacy field
+          bloodtest_data: data.bloodTests,
+          amount_paid_history: paymentHistoryData,
+          doctor_name: data.doctorName, // ONLY save to this column
+        })
+        .select()
+        .single() // Select the inserted row to get its ID
       throwIfError(regErr)
+
+      const registrationId = regData.id // Get the ID of the newly created registration
+
+      const patientContact = data.contact
+      const patientName = data.name
+      const registrationDate = data.registrationDate
+      const registrationTime = data.registrationTime
+      const doctorName = data.doctorName
+      const totalAmountFormatted = totalAmount.toFixed(2)
+      const totalPaidFormatted = totalPaid.toFixed(2)
+      const remainingAmountFormatted = remainingAmount.toFixed(2)
+
+      const bloodTestNames = data.bloodTests.map((test) => test.testName).join(", ") || "No blood tests booked."
+
+      const whatsappMessage = `Dear *${patientName}*,\n\nYour appointment at *MEDFORD HOSPITAL* on *${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
+
+      const whatsappPayload = {
+        token: "99583991572",
+        number: `91${patientContact}`,
+        message: whatsappMessage,
+      }
+
+      try {
+        const whatsappResponse = await fetch("https://wa.medblisss.com/send-text", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(whatsappPayload),
+        })
+
+        const whatsappResult = await whatsappResponse.json()
+        if (whatsappResponse.ok) {
+          console.log("WhatsApp message sent successfully:", whatsappResult)
+        } else {
+          console.error("Failed to send WhatsApp message:", whatsappResult)
+          // Optionally, alert the user about WhatsApp message failure, but allow form submission to complete
+          // alert("Failed to send WhatsApp confirmation message.");
+        }
+      } catch (whatsappError) {
+        console.error("Error sending WhatsApp message:", whatsappError)
+        // Optionally, alert the user about WhatsApp message error, but allow form submission to complete
+        // alert("Error sending WhatsApp confirmation message.");
+      }
 
       const message = data.existingPatientId
         ? "New registration added to existing patient successfully ✅"
@@ -426,7 +472,6 @@ export default function PatientEntryForm() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-     
       <div className="flex-1 overflow-auto">
         <Card className="h-full rounded-none">
           <CardContent className="p-6 h-full">
