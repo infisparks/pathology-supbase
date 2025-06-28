@@ -1,4 +1,5 @@
 export interface BloodTest {
+  name: any
   testId: string
   testName: string
   price: number

@@ -672,6 +672,7 @@ export default function PatientEntryForm() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="MEDFORD HOSPITAL">MEDFORD HOSPITAL</SelectItem>
+                          <SelectItem value="GAUTAMI HOSPITAL">GAUTAMI HOSPITAL</SelectItem>
                           <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
