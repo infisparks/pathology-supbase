@@ -44,7 +44,7 @@ export default function LoginPage() {
           </div>
           <div>
             <CardTitle className="text-2xl font-bold text-gray-900">
-              Pathology Lab System
+              InfiCare Lab System
             </CardTitle>
             <p className="text-gray-600 mt-2">
               Sign in to manage your laboratory
