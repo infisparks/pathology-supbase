@@ -404,7 +404,7 @@ export default function PatientEntryForm() {
       const whatsappMessage = `Dear *${patientName}*,\n\nYour appointment at *MEDFORD HOSPITAL* on *${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
 
       const whatsappPayload = {
-        token: "99583991572",
+        token: "99583991573",
         number: `91${patientContact}`,
         message: whatsappMessage,
       }
