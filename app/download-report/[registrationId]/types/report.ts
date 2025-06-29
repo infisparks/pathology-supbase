@@ -2,7 +2,21 @@ export interface AgeRangeItem {
     rangeKey: string
     rangeValue: string
   }
+  export type AiRecommendationItem = {
+    heading: string
+    content: string
+  }
   
+  export type AiRecommendationSection = {
+    title: string
+    description: string
+    items: AiRecommendationItem[]
+  }
+  
+  export type AiSuggestions = {
+    diet: AiRecommendationSection
+    exercise: AiRecommendationSection
+  }
   export interface Parameter {
     name: string
     value: string | number

@@ -1,9 +1,13 @@
 "use client"
 
 import type React from "react"
+
 import { Suspense, useEffect, useState } from "react"
+
 import { useRouter, useParams } from "next/navigation"
+
 import { supabase } from "@/lib/supabase"
+
 import type {
   PatientData,
   BloodTestData,
@@ -11,13 +15,13 @@ import type {
   HistoricalTestEntry,
   ComparisonTestSelection,
 } from "./types/report"
-import { generateReportPdf } from "./pdf-generator" // Import the new PDF generator utility
-import Lottie from "lottie-react"
-import { Player } from "@lottiefiles/react-lottie-player";
+
+import { generateReportPdf, generateAiSuggestions } from "./pdf-generator" // Import the new PDF generator utility and AI generator
 
 // -----------------------------
 // Helper Functions (Specific to this component's UI logic)
 // -----------------------------
+
 const toLocalDateTimeString = (dateInput?: string | Date) => {
   const date = dateInput ? new Date(dateInput) : new Date()
   const offset = date.getTimezoneOffset()
@@ -33,11 +37,9 @@ const format12Hour = (isoString: string) => {
   hours = hours % 12
   hours = hours ? hours : 12
   const minutesStr = minutes < 10 ? "0" + minutes : minutes
-
   const day = date.getDate().toString().padStart(2, "0")
   const month = (date.getMonth() + 1).toString().padStart(2, "0")
   const year = date.getFullYear()
-
   return `${day}/${month}/${year}, ${hours}:${minutesStr} ${ampm}`
 }
 
@@ -68,6 +70,7 @@ const slugifyTestName = (name: string) =>
 // -----------------------------
 // Component
 // -----------------------------
+
 export default function DownloadReportPage() {
   return (
     <Suspense fallback={<div>Loading Report...</div>}>
@@ -80,18 +83,15 @@ function DownloadReport() {
   const router = useRouter()
   const params = useParams()
   const registrationId = params.registrationId as string
-
   const [patientData, setPatientData] = useState<PatientData | null>(null)
   const [isSending, setIsSending] = useState(false)
   const [selectedTests, setSelectedTests] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
   const [combinedGroups, setCombinedGroups] = useState<CombinedTestGroup[]>([])
   const [showCombineInterface, setShowCombineInterface] = useState(false)
   const [draggedTest, setDraggedTest] = useState<string | null>(null)
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
-
   const [updateTimeModal, setUpdateTimeModal] = useState<{
     isOpen: boolean
     testKey: string
@@ -101,7 +101,6 @@ function DownloadReport() {
     testKey: "",
     currentTime: "",
   })
-
   const [updateSampleTimeModal, setUpdateSampleTimeModal] = useState<{
     isOpen: boolean
     currentTime: string
@@ -109,12 +108,10 @@ function DownloadReport() {
     isOpen: false,
     currentTime: "",
   })
-
   const [updateRegistrationTimeModal, setUpdateRegistrationTimeModal] = useState({
     isOpen: false,
     currentTime: "",
   })
-
   // New states for comparison report
   const [isComparisonMode, setIsComparisonMode] = useState(false)
   const [historicalTestsData, setHistoricalTestsData] = useState<Record<string, HistoricalTestEntry[]>>({}) // Map: testKey -> array of historical entries
@@ -128,34 +125,28 @@ function DownloadReport() {
       try {
         setLoading(true)
         setError(null)
-
         console.log("Fetching registration data for ID:", registrationId)
-
         // First, fetch current registration data with patient details
         const { data: registrationData, error: registrationError } = await supabase
           .from("registration")
           .select(
             `
-        *,
-        patientdetial (
-          id, name, age, gender, patient_id, number, total_day, title
-        )
-      `,
+          *,
+          patientdetial (
+            id, name, age, gender, patient_id, number, total_day, title
+          )
+        `,
           )
           .eq("id", registrationId)
           .single()
-
         if (registrationError) {
           console.error("Registration fetch error:", registrationError)
           throw new Error(`Failed to fetch registration: ${registrationError.message}`)
         }
-
         if (!registrationData) {
           throw new Error("Registration not found")
         }
-
         console.log("Current Registration data fetched:", registrationData)
-
         let parsedBloodtestDetail = registrationData.bloodtest_detail
         if (typeof parsedBloodtestDetail === "string") {
           try {
@@ -165,7 +156,6 @@ function DownloadReport() {
             parsedBloodtestDetail = {}
           }
         }
-
         let parsedBloodtestData = registrationData.bloodtest_data
         if (typeof parsedBloodtestData === "string") {
           try {
@@ -175,12 +165,10 @@ function DownloadReport() {
             parsedBloodtestData = []
           }
         }
-
         const patientdetial = registrationData.patientdetial as any
         if (!patientdetial) {
           throw new Error("Patient details not found")
         }
-
         const mappedPatientData: PatientData = {
           id: patientdetial.id,
           name: patientdetial.name,
@@ -198,7 +186,6 @@ function DownloadReport() {
           bloodtest_detail: parsedBloodtestDetail || {},
           doctorName: registrationData.doctor_name, // Add this line
         }
-
         const bloodtestFromDetail: Record<string, BloodTestData> = {}
         if (parsedBloodtestDetail && typeof parsedBloodtestDetail === "object") {
           for (const [testKey, testData] of Object.entries(parsedBloodtestDetail)) {
@@ -217,31 +204,25 @@ function DownloadReport() {
             }
           }
         }
-
         const finalBloodtestData = hideInvisible({ ...mappedPatientData, bloodtest: bloodtestFromDetail })
         setPatientData({ ...mappedPatientData, bloodtest: finalBloodtestData })
-
         // Fetch historical registrations for the same patient using patientdetial.id
         const { data: historicalRegistrations, error: historicalError } = await supabase
           .from("registration")
           .select(
             `
-        id, registration_time, bloodtest_detail, bloodtest_data
-      `,
+          id, registration_time, bloodtest_detail, bloodtest_data
+        `,
           )
           .eq("patient_id", patientdetial.id) // FIX: Use patientdetial.id (the bigint)
           .order("registration_time", { ascending: true }) // Order by date for comparison
-
         if (historicalError) {
           console.error("Historical registrations fetch error:", historicalError)
           throw new Error(`Failed to fetch historical data: ${historicalError.message}`)
         }
-
         console.log("Historical registrations fetched:", historicalRegistrations)
-
         const aggregatedHistoricalData: Record<string, HistoricalTestEntry[]> = {}
         const initialComparisonSelections: Record<string, ComparisonTestSelection> = {}
-
         historicalRegistrations.forEach((reg) => {
           let regBloodtestDetail = reg.bloodtest_detail
           if (typeof regBloodtestDetail === "string") {
@@ -252,7 +233,6 @@ function DownloadReport() {
               regBloodtestDetail = {}
             }
           }
-
           let regBloodtestData = reg.bloodtest_data
           if (typeof regBloodtestData === "string") {
             try {
@@ -262,15 +242,12 @@ function DownloadReport() {
               regBloodtestData = []
             }
           }
-
           for (const [testKey, testDetail] of Object.entries(regBloodtestDetail || {})) {
             const testInfo = testDetail as any
             const originalTestName =
               regBloodtestData?.find((t: any) => slugifyTestName(t.testName) === testKey || t.testName === testKey)
                 ?.testName || testKey.replace(/_/g, " ")
-
             const reportedOn = testInfo.reportedOn || reg.registration_time // Fallback to registration time
-
             if (!aggregatedHistoricalData[testKey]) {
               aggregatedHistoricalData[testKey] = []
             }
@@ -280,7 +257,6 @@ function DownloadReport() {
               testKey: testKey,
               parameters: testInfo.parameters || [],
             })
-
             if (!initialComparisonSelections[testKey]) {
               initialComparisonSelections[testKey] = {
                 testName: originalTestName,
@@ -297,19 +273,16 @@ function DownloadReport() {
             })
           }
         })
-
         // Sort available dates and pre-select latest N for common tests
         for (const testKey in initialComparisonSelections) {
           initialComparisonSelections[testKey].availableDates.sort(
             (a, b) => new Date(a.reportedOn).getTime() - new Date(b.reportedOn).getTime(),
           )
-
           const numToSelect = testKey === "cbc" ? 4 : testKey === "lft" ? 3 : 0 // Default N reports
           initialComparisonSelections[testKey].selectedDates = initialComparisonSelections[testKey].availableDates
             .slice(-numToSelect)
             .map((d) => d.date)
         }
-
         setHistoricalTestsData(aggregatedHistoricalData)
         setComparisonSelections(initialComparisonSelections)
       } catch (error) {
@@ -319,7 +292,6 @@ function DownloadReport() {
         setLoading(false)
       }
     }
-
     fetchAllData()
   }, [registrationId])
 
@@ -334,11 +306,9 @@ function DownloadReport() {
   const hideInvisible = (d: PatientData): Record<string, BloodTestData> => {
     const out: Record<string, BloodTestData> = {}
     if (!d.bloodtest) return out
-
     for (const k in d.bloodtest) {
       const t = d.bloodtest[k]
       if (t.type === "outsource") continue
-
       const keptParams = Array.isArray(t.parameters)
         ? t.parameters
             .filter((p) => p.visibility !== "hidden")
@@ -349,7 +319,6 @@ function DownloadReport() {
                 : [],
             }))
         : []
-
       out[k] = {
         ...t,
         parameters: keptParams,
@@ -358,7 +327,6 @@ function DownloadReport() {
         descriptions: t.descriptions,
       }
     }
-
     return out
   }
 
@@ -366,9 +334,7 @@ function DownloadReport() {
   const updateReportedOnTime = (testKey: string) => {
     const test = patientData?.bloodtest_detail?.[testKey]
     if (!test) return
-
     const currentTime = test.reportedOn ? toLocalDateTimeString(test.reportedOn) : toLocalDateTimeString()
-
     setUpdateTimeModal({
       isOpen: true,
       testKey,
@@ -379,10 +345,8 @@ function DownloadReport() {
   // Save updated reportedOn time
   const saveUpdatedTime = async () => {
     if (!patientData || !updateTimeModal.testKey) return
-
     try {
       const newReportedOn = new Date(updateTimeModal.currentTime).toISOString()
-
       const updatedBloodtestDetail = {
         ...patientData.bloodtest_detail,
         [updateTimeModal.testKey]: {
@@ -390,14 +354,11 @@ function DownloadReport() {
           reportedOn: newReportedOn,
         },
       }
-
       const { error } = await supabase
         .from("registration")
         .update({ bloodtest_detail: updatedBloodtestDetail })
         .eq("id", patientData.registration_id)
-
       if (error) throw error
-
       setPatientData((prev) => {
         if (!prev) return prev
         return {
@@ -414,7 +375,6 @@ function DownloadReport() {
             : undefined,
         }
       })
-
       setUpdateTimeModal((prev) => ({ ...prev, isOpen: false }))
       alert("Report time updated successfully!")
     } catch (error) {
@@ -428,7 +388,6 @@ function DownloadReport() {
     const currentTime = patientData?.sampleCollectedAt
       ? toLocalDateTimeString(patientData.sampleCollectedAt)
       : toLocalDateTimeString()
-
     setUpdateSampleTimeModal({
       isOpen: true,
       currentTime,
@@ -438,9 +397,8 @@ function DownloadReport() {
   // Open modal to update createdAt (Registration On)
   const updateRegistrationTime = () => {
     const currentTime = patientData?.createdAt ? toLocalDateTimeString(patientData.createdAt) : toLocalDateTimeString()
-
     setUpdateRegistrationTimeModal({
-      isOpen: false,
+      isOpen: true, // Changed to true to open the modal
       currentTime,
     })
   }
@@ -448,16 +406,13 @@ function DownloadReport() {
   // Save updated sampleCollectedAt time
   const saveUpdatedSampleTime = async () => {
     if (!patientData) return
-
     try {
       const newSampleAt = new Date(updateSampleTimeModal.currentTime).toISOString()
       const { error } = await supabase
         .from("registration")
         .update({ samplecollected_time: newSampleAt })
         .eq("id", patientData.registration_id)
-
       if (error) throw error
-
       setPatientData((prev) => (prev ? { ...prev, sampleCollectedAt: newSampleAt } : prev))
       setUpdateSampleTimeModal((prev) => ({ ...prev, isOpen: false }))
       alert("Sample collected time updated successfully!")
@@ -470,19 +425,14 @@ function DownloadReport() {
   // Save updated registration time (createdAt)
   const saveUpdatedRegistrationTime = async () => {
     if (!patientData) return
-
     try {
       const newCreatedAt = new Date(updateRegistrationTimeModal.currentTime).toISOString()
-
       const { error } = await supabase
         .from("registration")
         .update({ registration_time: newCreatedAt })
         .eq("id", patientData.registration_id)
-
       if (error) throw error
-
       setPatientData((prev) => (prev ? { ...prev, createdAt: newCreatedAt } : prev))
-
       setUpdateRegistrationTimeModal((prev) => ({ ...prev, isOpen: false }))
       alert("Registration time updated successfully!")
     } catch (error) {
@@ -525,7 +475,6 @@ function DownloadReport() {
   const handleDrop = (e: React.DragEvent, groupId: string) => {
     e.preventDefault()
     if (!draggedTest) return
-
     const updatedGroups = combinedGroups.map((group) => {
       if (group.id === groupId) {
         if (!group.tests.includes(draggedTest)) {
@@ -537,7 +486,6 @@ function DownloadReport() {
       }
       return group
     })
-
     setCombinedGroups(updatedGroups)
     setDraggedTest(null)
     setActiveGroupId(null)
@@ -554,7 +502,6 @@ function DownloadReport() {
   // Download PDF report
   const downloadPDF = async (reportType: "normal" | "comparison" | "combined") => {
     if (!patientData) return
-
     setIsSending(true)
     try {
       const blob = await generateReportPdf(
@@ -566,6 +513,8 @@ function DownloadReport() {
         reportType,
         true, // Always include letterhead for downloads
         false, // Never skip cover for downloads
+        undefined, // No AI suggestions for direct download
+        false, // Do not include AI suggestions page
       )
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -595,6 +544,8 @@ function DownloadReport() {
         reportType,
         withLetter,
         true, // Always skip cover for preview
+        undefined, // No AI suggestions for preview
+        false, // Do not include AI suggestions page
       )
       const url = URL.createObjectURL(blob)
       window.open(url, "_blank")
@@ -609,6 +560,10 @@ function DownloadReport() {
     if (!patientData) return
     try {
       setIsSending(true)
+
+      // Generate AI suggestions
+      const aiSuggestions = await generateAiSuggestions(patientData, patientData.bloodtest || {})
+
       const blob = await generateReportPdf(
         patientData,
         selectedTests,
@@ -617,37 +572,33 @@ function DownloadReport() {
         comparisonSelections,
         "normal", // Default to normal report for WhatsApp
         true, // Include letterhead for WhatsApp
-        false, // Do not skip cover for WhatsApp
+        false, // Do not skip cover for WhatsApp (so cover is page 1)
+        aiSuggestions, // Pass AI suggestions
+        true, // Include AI suggestions page for WhatsApp (this will be page 2)
       )
-
       const filename = `reports/${patientData.registration_id}_${Date.now()}.pdf`
       const { data: uploadData, error: uploadError } = await supabase.storage.from("reports").upload(filename, blob, {
         cacheControl: "3600",
         upsert: false,
         contentType: "application/pdf",
       })
-
       if (uploadError) {
         console.error("Supabase upload error:", uploadError)
         throw new Error(`Failed to upload file to Supabase: ${uploadError.message}`)
       }
-
       const { data: publicUrlData } = supabase.storage.from("reports").getPublicUrl(filename)
       const url = publicUrlData.publicUrl
-
       const payload = {
         token: "99583991573",
         number: "91" + patientData.contact,
         imageUrl: url,
         caption: `Dear ${patientData.name},\n\nYour blood test report is now available:\n${url}\n\nRegards,\nYour Lab Team`,
       }
-
       const res = await fetch("https://wa.medblisss.com/send-image-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ message: "Unknown error" }))
         console.error("WhatsApp API Error:", errorData)
@@ -723,7 +674,6 @@ function DownloadReport() {
           {/* Report Actions Card */}
           <div className="bg-white rounded-xl shadow-lg p-8 space-y-4 col-span-1 md:col-span-2">
             <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Report Ready</h2>
-
             {/* Patient Info Display */}
             <div className="p-4 bg-blue-50 rounded-lg mb-4">
               <h3 className="text-lg font-semibold text-gray-800 mb-2">Patient Information</h3>
@@ -747,7 +697,6 @@ function DownloadReport() {
                 </div>
               </div>
             </div>
-
             {/* Registration On Display and Update Button */}
             <div className="p-4 bg-gray-100 rounded-lg">
               <div className="flex items-center justify-between">
@@ -779,7 +728,6 @@ function DownloadReport() {
                 </button>
               </div>
             </div>
-
             {/* Sample Collected On Display and Update Button */}
             <div className="p-4 bg-gray-100 rounded-lg">
               <div className="flex items-center justify-between">
@@ -811,7 +759,6 @@ function DownloadReport() {
                 </button>
               </div>
             </div>
-
             {/* Comparison Report Checkbox */}
             <div className="p-4 bg-gray-100 rounded-lg">
               <label className="flex items-center space-x-3">
@@ -824,7 +771,6 @@ function DownloadReport() {
                 <span className="text-gray-700 font-medium">Generate Comparison Report</span>
               </label>
             </div>
-
             {/* Download Buttons */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <button
@@ -848,7 +794,6 @@ function DownloadReport() {
                 </svg>
                 <span>Download Report</span>
               </button>
-
               <button
                 onClick={() => downloadPDF("combined")}
                 className="w-full flex items-center justify-center space-x-3 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out"
@@ -870,7 +815,6 @@ function DownloadReport() {
                 </svg>
                 <span>Download Combined</span>
               </button>
-
               <button
                 onClick={() => downloadPDF("comparison")}
                 className="w-full flex items-center justify-center space-x-3 bg-sky-600 hover:bg-sky-700 text-white px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out"
@@ -893,7 +837,6 @@ function DownloadReport() {
                 <span>Download Comparison</span>
               </button>
             </div>
-
             {/* Preview Buttons */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <button
@@ -922,7 +865,6 @@ function DownloadReport() {
                 </svg>
                 <span>Preview (Letterhead)</span>
               </button>
-
               <button
                 onClick={() => preview(isComparisonMode ? "comparison" : "normal", false)}
                 className="w-full flex items-center justify-center space-x-3 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out"
@@ -950,51 +892,31 @@ function DownloadReport() {
                 <span>Preview (No letterhead)</span>
               </button>
             </div>
-
             {/* WhatsApp Button */}
             <>
-  {/* WhatsApp Button */}
-  <button
-    onClick={sendWhatsApp}
-    disabled={isSending}
-    className={`w-full flex items-center justify-center space-x-3 px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out ${
-      isSending ? "bg-gray-400 cursor-not-allowed" : "bg-[#25D366] hover:bg-[#128C7E] text-white"
-    }`}
-  >
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-    >
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.709.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c0-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
-    </svg>
-    <span>
-      {isSending ? "Sending…" : "Send via WhatsApp"}
-    </span>
-  </button>
-
-  {/* Lottie Overlay Popup */}
-  {isSending && (
-  <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-40">
-    <div className="bg-white rounded-xl shadow-xl p-8 flex flex-col items-center">
-      <div className="w-32 h-32">
-        <Player
-          src="https://lottie.host/0f7cf991-4229-4523-9e9f-8ab4b225cd31/CAsSivLtT0.json"
-          autoplay
-          loop
-          style={{ height: "128px", width: "128px" }}
-        />
-      </div>
-      <div className="mt-4 text-lg font-semibold text-gray-700">Sending Report via WhatsApp…</div>
-    </div>
-  </div>
-)}
-</>
-
+              <button
+                onClick={sendWhatsApp}
+                disabled={isSending}
+                className={`w-full flex items-center justify-center space-x-3 px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out ${
+                  isSending ? "bg-gray-400 cursor-not-allowed" : "bg-[#25D366] hover:bg-[#128C7E] text-white"
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.709.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c0-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
+                </svg>
+                <span>{isSending ? "Sending…" : "Send via WhatsApp"}</span>
+              </button>
+              {/* Loading Overlay Popup */}
+              {isSending && (
+                <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-40">
+                  <div className="bg-white rounded-xl shadow-xl p-8 flex flex-col items-center">
+                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
+                    <div className="mt-4 text-lg font-semibold text-gray-700">Sending Report via WhatsApp…</div>
+                  </div>
+                </div>
+              )}
+            </>
           </div>
-
           {/* Test Selection Card */}
           {!isComparisonMode && (
             <div className="bg-white rounded-xl shadow-lg p-8 space-y-4">
@@ -1043,7 +965,6 @@ function DownloadReport() {
               </div>
             </div>
           )}
-
           {/* Comparison Report Test and Date Selection Card */}
           {isComparisonMode && (
             <div className="bg-white rounded-xl shadow-lg p-8 space-y-4 col-span-1 md:col-span-2">
@@ -1092,7 +1013,6 @@ function DownloadReport() {
               </div>
             </div>
           )}
-
           {/* Combined Test Groups Card */}
           {!isComparisonMode && (
             <div className="bg-white rounded-xl shadow-lg p-8 space-y-4">
@@ -1105,7 +1025,6 @@ function DownloadReport() {
                   {showCombineInterface ? "Hide" : "Show"} Interface
                 </button>
               </div>
-
               {showCombineInterface && (
                 <>
                   <div className="space-y-4">
@@ -1165,14 +1084,12 @@ function DownloadReport() {
                       </div>
                     ))}
                   </div>
-
                   <button
                     onClick={addCombinedGroup}
                     className="px-4 py-2 bg-green-500 hover:bg-green-700 text-white rounded-xl transition duration-150 ease-in-out"
                   >
                     Add New Group
                   </button>
-
                   <div className="border-t pt-4">
                     <h3 className="text-lg font-semibold text-gray-700 mb-2">Drag Tests to Groups</h3>
                     <div className="flex flex-wrap gap-2">
@@ -1195,7 +1112,6 @@ function DownloadReport() {
           )}
         </div>
       </div>
-
       {/* Update Time Modal */}
       {updateTimeModal.isOpen && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -1228,7 +1144,6 @@ function DownloadReport() {
           </div>
         </div>
       )}
-
       {/* Update Sample Time Modal */}
       {updateSampleTimeModal.isOpen && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -1261,7 +1176,6 @@ function DownloadReport() {
           </div>
         </div>
       )}
-
       {/* Update Registration Time Modal */}
       {updateRegistrationTimeModal.isOpen && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">

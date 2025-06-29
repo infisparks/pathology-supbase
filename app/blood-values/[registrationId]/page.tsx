@@ -1,13 +1,35 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+
+import { useEffect, useState, useCallback } from "react"
+
 import { useForm, type SubmitHandler, type Path } from "react-hook-form"
+
 import { useParams, useRouter } from "next/navigation"
+
 import { supabase } from "@/lib/supabase" // Assuming your Supabase client is configured here
-import { Droplet, User, AlertCircle, CheckCircle, Loader2, Calculator } from "lucide-react" // Using Lucide React icons
+
+import { Droplet, User, AlertCircle, CheckCircle, Loader2, Calculator, CircleUserRound } from "lucide-react" // Using Lucide React icons
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+
+import { Input } from "@/components/ui/input"
+
+import { Button } from "@/components/ui/button"
+
+import { Label } from "@/components/ui/label"
+
+import { cn } from "@/lib/utils" // Utility to conditionally join class names
+
+import { Badge } from "@/components/ui/badge"
+
+import { Separator } from "@/components/ui/separator"
+
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 /* ─────────────────── Types ─────────────────── */
+
 interface SubParameterValue {
   name: string
   unit: string
@@ -16,6 +38,7 @@ interface SubParameterValue {
   formula?: string
   valueType: "number" | "text"
 }
+
 interface TestParameterValue {
   name: string
   unit: string
@@ -34,10 +57,9 @@ interface SubHeading {
   is100?: boolean | string
 }
 
-// Corrected TestStructure interface to match database columns
 interface TestStructure {
-  parameter: TestParameterValue[] // Matches 'parameter' column
-  sub_heading: SubHeading[] // Matches 'sub_heading' column
+  parameter: TestParameterValue[]
+  sub_heading: SubHeading[]
 }
 
 interface TestValueEntry {
@@ -53,13 +75,14 @@ interface BloodValuesFormInputs {
   registrationId: string
   tests: TestValueEntry[]
 }
+
 export type IndexedParam = TestParameterValue & { originalIndex: number }
 
 /* ───────────── Helpers ───────────── */
+
 const parseRange = (rangeStr: string): { min?: number; max?: number } => {
   const range = rangeStr.trim()
   if (range === "") return {}
-
   const hyphenParts = range.split("-")
   if (hyphenParts.length === 2) {
     const min = Number.parseFloat(hyphenParts[0])
@@ -92,12 +115,13 @@ const parseRangeKey = (key: string) => {
   const mul = unit === "y" ? 365 : unit === "m" ? 30 : 1
   return { lower: l * mul, upper: u * mul }
 }
-const isNumeric = (s: string) => !isNaN(+s) && isFinite(+s)
 
 /* ---- Helper to format numbers with up to 3 decimals, dropping trailing zeros ---- */
+
 const fmt3 = (n: number) => n.toFixed(3).replace(/\.?0+$/, "")
 
 /* ---------- dropdown position helper ---------- */
+
 interface SuggestPos {
   t: number
   p: number
@@ -106,7 +130,17 @@ interface SuggestPos {
   width: number
 }
 
+// Helper to extract parameter names from a formula string
+
+const getFormulaDependencies = (formula: string): string[] => {
+  const matches = formula.match(/[a-zA-Z_][a-zA-Z0-9_]*/g)
+  // Filter out common mathematical functions or keywords if necessary
+  const keywords = new Set(["Math", "abs", "round", "floor", "ceil", "min", "max", "log", "pow", "sqrt"])
+  return Array.from(new Set(matches?.filter((m) => !keywords.has(m)) || []))
+}
+
 /* ------------------------------------------------------------------ */
+
 const BloodValuesForm: React.FC = () => {
   const router = useRouter()
   const params = useParams()
@@ -122,6 +156,7 @@ const BloodValuesForm: React.FC = () => {
     age: number
     gender: string
     patientId: string
+    name: string
   } | null>(null)
 
   const {
@@ -152,13 +187,11 @@ const BloodValuesForm: React.FC = () => {
     if (!registrationId) return
     ;(async () => {
       try {
-        // Fetch registration details
         const { data: registrationData, error: registrationError } = await supabase
           .from("registration")
           .select("patient_id, bloodtest_data, bloodtest_detail")
           .eq("id", registrationId)
           .single()
-
         if (registrationError || !registrationData) {
           console.error("Error fetching registration:", registrationError)
           setLoading(false)
@@ -169,13 +202,11 @@ const BloodValuesForm: React.FC = () => {
         const bookedTests = registrationData.bloodtest_data || []
         const storedBloodtestDetail = registrationData.bloodtest_detail || {}
 
-        // Fetch patient details for age and gender
         const { data: patientData, error: patientError } = await supabase
           .from("patientdetial")
-          .select("id, age, gender, patient_id")
+          .select("id, age, gender, patient_id, name")
           .eq("id", patientId)
           .single()
-
         if (patientError || !patientData) {
           console.error("Error fetching patient details:", patientError)
           setLoading(false)
@@ -187,20 +218,19 @@ const BloodValuesForm: React.FC = () => {
           age: patientData.age,
           gender: patientData.gender,
           patientId: patientData.patient_id,
+          name: patientData.name,
         })
 
-        const ageDays = patientData.age * 365 // Assuming age is in years, convert to days
+        const ageDays = patientData.age * 365
         const genderKey = patientData.gender?.toLowerCase() === "male" ? "male" : "female"
 
         const tests: TestValueEntry[] = await Promise.all(
           bookedTests.map(async (bt: any) => {
-            // Fetch test structure from blood_test table, selecting 'parameter' and 'sub_heading'
             const { data: testDefData, error: testDefError } = await supabase
               .from("blood_test")
-              .select("parameter, sub_heading") // Corrected select statement
+              .select("parameter, sub_heading")
               .eq("test_name", bt.testName)
               .single()
-
             if (testDefError || !testDefData) {
               console.warn(`Test definition not found for ${bt.testName}:`, testDefError)
               return {
@@ -213,7 +243,6 @@ const BloodValuesForm: React.FC = () => {
               } as TestValueEntry
             }
 
-            // Access parameters and subheadings directly from testDefData
             const allParams = Array.isArray(testDefData.parameter) ? testDefData.parameter : []
             const subheadings = Array.isArray(testDefData.sub_heading) ? testDefData.sub_heading : []
 
@@ -237,7 +266,6 @@ const BloodValuesForm: React.FC = () => {
                 .toLowerCase()
                 .replace(/\s+/g, "_")
                 .replace(/[.#$[\]]/g, "")
-
               const saved = storedBloodtestDetail?.[testKey]?.parameters?.find((q: any) => q.name === p.name)
 
               let subps
@@ -276,18 +304,16 @@ const BloodValuesForm: React.FC = () => {
                 ...(p.suggestions ? { suggestions: p.suggestions } : {}),
               } as TestParameterValue
             })
-
             return {
               testId: bt.testId,
               testName: bt.testName,
               testType: bt.testType,
               parameters: params,
-              subheadings: subheadings, // Use the fetched subheadings
+              subheadings: subheadings,
               selectedParameters: bt.selectedParameters,
             } as TestValueEntry
           }),
         )
-
         reset({ registrationId, tests })
       } catch (e) {
         console.error("Error in fetching data for form:", e)
@@ -298,10 +324,10 @@ const BloodValuesForm: React.FC = () => {
   }, [registrationId, reset])
 
   /* ══════════════ “Sum to 100” warning logic ══════════════ */
+
   const testsWatch = watch("tests")
   useEffect(() => {
     const warn: Record<string, boolean> = {}
-
     testsWatch.forEach((t, tIdx) => {
       t.subheadings?.forEach((sh, shIdx) => {
         if (!(sh.is100 === true || sh.is100 === "true")) return
@@ -315,42 +341,57 @@ const BloodValuesForm: React.FC = () => {
         warn[tag] = sum > 100.0001
       })
     })
-
     setWarn100(warn)
   }, [testsWatch])
 
-  /* ══════════════ Formula recalculation on Shift key ══════════════ */
-  useEffect(() => {
-    const runAll = () => {
-      const tArr = watch("tests")
-      tArr.forEach((t, tIdx) => {
-        const nums: Record<string, number> = {}
-        t.parameters.forEach((p) => {
-          const v = +p.value
-          if (!isNaN(v)) nums[p.name] = v
-        })
-        t.parameters.forEach((p, pIdx) => {
-          if (p.formula && p.valueType === "number") {
-            let expr = p.formula
-            Object.entries(nums).forEach(([k, v]) => {
-              expr = expr.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), v + "")
-            })
-            try {
-              const r = Function('"use strict";return (' + expr + ")")()
-              if (!isNaN(r)) {
-                setValue(`tests.${tIdx}.parameters.${pIdx}.value`, fmt3(r), { shouldValidate: false })
-              }
-            } catch {}
-          }
-        })
+  /* ══════════════ Automatic Formula recalculation ══════════════ */
+
+  const calcFormulaOnce = useCallback(
+    (tIdx: number, pIdx: number) => {
+      const data = watch("tests")[tIdx]
+      const p = data.parameters[pIdx]
+      if (!p.formula || p.valueType !== "number") return
+
+      const nums: Record<string, number> = {}
+      data.parameters.forEach((x) => {
+        const v = +x.value
+        if (!isNaN(v)) nums[x.name] = v
       })
-    }
-    const onKey = (e: KeyboardEvent) => e.key === "Shift" && runAll()
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [watch, setValue])
+
+      let expr = p.formula
+      Object.entries(nums).forEach(([k, v]) => {
+        expr = expr.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), v + "")
+      })
+
+      try {
+        const r = Function('"use strict";return (' + expr + ");")()
+        if (!isNaN(r)) setValue(`tests.${tIdx}.parameters.${pIdx}.value`, fmt3(r), { shouldValidate: false })
+      } catch (e) {
+        console.error(`Error evaluating formula for ${p.name}:`, e)
+      }
+    },
+    [setValue, watch],
+  )
+
+  useEffect(() => {
+    testsWatch.forEach((test, tIdx) => {
+      test.parameters.forEach((param, pIdx) => {
+        if (param.formula && param.valueType === "number") {
+          const dependencies = getFormulaDependencies(param.formula)
+          const allDependenciesMet = dependencies.every((depName) => {
+            const depParam = test.parameters.find((p) => p.name === depName)
+            return depParam && !isNaN(+depParam.value)
+          })
+          if (allDependenciesMet) {
+            calcFormulaOnce(tIdx, pIdx)
+          }
+        }
+      })
+    })
+  }, [testsWatch, calcFormulaOnce])
 
   /* ══════════════ Numeric Change: allow up to 3 decimal places or “<” / “>” prefixes ══════════════ */
+
   const numericChange = (v: string, t: number, p: number, sp?: number) => {
     if (v === "" || v === "-") {
       // allow empty or single minus
@@ -365,6 +406,7 @@ const BloodValuesForm: React.FC = () => {
   }
 
   /* ══════════════ Build suggestions for text inputs ══════════════ */
+
   const buildMatches = (param: TestParameterValue, q: string): string[] => {
     if (Array.isArray(param.suggestions) && param.suggestions.length > 0) {
       const pool = param.suggestions.map((s) => s.description)
@@ -403,27 +445,8 @@ const BloodValuesForm: React.FC = () => {
     setShowSug(null)
   }
 
-  /* ══════════════ Single‐formula calculation via button ══════════════ */
-  const calcFormulaOnce = (tIdx: number, pIdx: number) => {
-    const data = watch("tests")[tIdx]
-    const p = data.parameters[pIdx]
-    if (!p.formula || p.valueType !== "number") return
-    const nums: Record<string, number> = {}
-    data.parameters.forEach((x) => {
-      const v = +x.value
-      if (!isNaN(v)) nums[x.name] = v
-    })
-    let expr = p.formula
-    Object.entries(nums).forEach(([k, v]) => {
-      expr = expr.replace(new RegExp(k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), v + "")
-    })
-    try {
-      const r = Function('"use strict";return (' + expr + ")")()
-      if (!isNaN(r)) setValue(`tests.${tIdx}.parameters.${pIdx}.value`, fmt3(r))
-    } catch {}
-  }
-
   /* ══════════════ Handle “fill remaining” for subheadings that sum to 100 ══════════════ */
+
   const fillRemaining = (tIdx: number, sh: SubHeading, lastIdx: number) => {
     const test = watch("tests")[tIdx]
     const idxs = sh.parameterNames.map((n) => test.parameters.findIndex((p) => p.name === n)).filter((i) => i >= 0)
@@ -432,57 +455,48 @@ const BloodValuesForm: React.FC = () => {
       const v = +test.parameters[i].value
       if (!isNaN(v)) total += v
     })
-
     const remainder = 100 - total
     const integerValue = Math.round(remainder)
     setValue(`tests.${tIdx}.parameters.${lastIdx}.value`, integerValue.toString(), { shouldValidate: false })
   }
 
   /* ══════════════ Submit handler: write back to Supabase ══════════════ */
+
   const onSubmit: SubmitHandler<BloodValuesFormInputs> = async (data) => {
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser()
       if (userError) throw userError
       const fullEmail = userData.user?.email ?? ""
-      const enteredBy = fullEmail.split("@")[0] || "unknown" // Fallback if email is not available
+      const enteredBy = fullEmail.split("@")[0] || "unknown"
 
-      // Fetch existing bloodtest_detail to merge BEFORE processing tests
       const { data: existingRegData, error: fetchError } = await supabase
         .from("registration")
         .select("bloodtest_detail")
         .eq("id", data.registrationId)
         .single()
-
       if (fetchError) throw fetchError
 
       const existingBloodtestDetail = existingRegData?.bloodtest_detail || {}
 
       const bloodtestDetail: Record<string, any> = {}
-
       for (const t of data.tests) {
         const key = t.testName
           .toLowerCase()
           .replace(/\s+/g, "_")
           .replace(/[.#$[\]]/g, "")
         const now = new Date().toISOString()
-
         const params = t.parameters
           .map((p) => {
             const subs = p.subparameters?.filter((sp) => sp.value !== "") ?? []
             if (p.value !== "" || subs.length) {
               const obj: any = { ...p, subparameters: subs }
-
-              // If the entered value starts with ">" or "<", keep it as a string
               const strValue = String(p.value)
               if (/^[<>]/.test(strValue)) {
                 obj.value = strValue
               } else if (p.valueType === "number" && p.value !== "") {
-                // Otherwise, convert to number (or preserve trailing zero if present)
                 const numValue = +p.value
                 obj.value = strValue.includes(".") && strValue.endsWith("0") ? strValue : numValue
               }
-
-              // Handle subparameters similarly
               subs.forEach((sp) => {
                 const spStr = String(sp.value)
                 if (/^[<>]/.test(spStr)) {
@@ -492,7 +506,6 @@ const BloodValuesForm: React.FC = () => {
                   sp.value = spStr.includes(".") && spStr.endsWith("0") ? spStr : spNum
                 }
               })
-
               return obj
             }
             return null
@@ -503,26 +516,24 @@ const BloodValuesForm: React.FC = () => {
           parameters: params,
           testId: t.testId,
           subheadings: t.subheadings || [],
-          createdAt: existingBloodtestDetail[key]?.createdAt || now, // Preserve existing createdAt or set new
-          reportedOn: now, // Always update reportedOn to current time
-          enteredBy, // Always update enteredBy to current user
+          createdAt: existingBloodtestDetail[key]?.createdAt || now,
+          reportedOn: now,
+          enteredBy,
         }
       }
 
       const mergedBloodtestDetail = {
-        ...existingBloodtestDetail, // Use the fetched existing data
-        ...bloodtestDetail, // Merge new/updated data
+        ...existingBloodtestDetail,
+        ...bloodtestDetail,
       }
 
       const { error } = await supabase
         .from("registration")
         .update({ bloodtest_detail: mergedBloodtestDetail })
         .eq("id", data.registrationId)
-
       if (error) throw error
 
       alert("Saved!")
-      // new redirect using the internal id
       router.push(`/download-report/${registrationId}`)
     } catch (e: any) {
       console.error("Save failed:", e.message)
@@ -531,14 +542,14 @@ const BloodValuesForm: React.FC = () => {
   }
 
   /* ── Early returns for missing registrationId or loading ── */
+
   if (!registrationId)
     return (
       <CenterCard icon={User} title="Registration Not Found">
-        <button onClick={() => router.push("/")} className="btn-blue">
-          Back
-        </button>
+        <Button onClick={() => router.push("/")}>Back</Button>
       </CenterCard>
     )
+
   if (loading)
     return (
       <CenterCard icon={Loader2} spin>
@@ -549,177 +560,222 @@ const BloodValuesForm: React.FC = () => {
   const tests = watch("tests")
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-2">
-      <div className="w-full max-w-3xl bg-white p-4 rounded-xl shadow relative">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-blue-100 rounded-full">
-            <Droplet className="w-6 h-6 text-blue-600" />
-          </div>
-          <div>
-            <h1 className="font-bold text-lg">Blood Test Analysis</h1>
-            <p className="text-sm text-gray-600">
-              Patient ID: {patientDetails?.patientId} (Registration ID: {registrationId})
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit(onSubmit)}>
-          {tests.map((test, tIdx) => {
-            if (test.testType?.toLowerCase() === "outsource") {
-              return (
-                <div key={test.testId} className="border-l-4 border-yellow-400 bg-yellow-50 mb-4 p-3 rounded">
-                  <div className="flex items-center gap-2">
-                    <Droplet className="w-4 h-4 text-yellow-600" />
-                    <h3 className="font-semibold">{test.testName}</h3>
+    <TooltipProvider>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <Card className="w-full max-w-3xl relative shadow-lg">
+          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pb-2">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+              <Droplet className="h-6 w-6" />
+            </div>
+            <div className="grid gap-1">
+              <CardTitle className="text-2xl font-bold text-gray-800">Blood Test Analysis</CardTitle>
+              <CardDescription className="text-gray-600">
+                Comprehensive data entry for patient blood test results.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {patientDetails && (
+              <Card className="mb-6 bg-blue-50 border-blue-200 shadow-sm">
+                <CardContent className="p-3 flex items-center gap-4">
+                  <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-blue-200 text-blue-700 text-2xl font-semibold">
+                    {patientDetails.name ? (
+                      patientDetails.name.charAt(0).toUpperCase()
+                    ) : (
+                      <CircleUserRound className="h-8 w-8" />
+                    )}
                   </div>
-                  <p className="mt-2 text-sm text-yellow-800">This is an outsourced test. No data entry is required.</p>
-                </div>
-              )
-            }
-
-            const sh = test.subheadings || []
-            const shNames = sh.flatMap((x) => x.parameterNames)
-            const globals = test.parameters
-              .map((p, i) => ({ ...p, originalIndex: i }))
-              .filter((p) => !shNames.includes(p.name))
-
-            return (
-              <div key={test.testId} className="border-l-4 border-blue-600 bg-gray-50 mb-4 p-3 rounded">
-                <div className="flex items-center gap-2 mb-2">
-                  <Droplet className="w-4 h-4 text-blue-600" />
-                  <h3 className="font-semibold">{test.testName}</h3>
-                </div>
-
-                {sh.length > 0 && globals.length > 0 && (
-                  <>
-                    <h4 className="font-bold text-sm mb-1">Global Parameters</h4>
-                    {globals.map((p) => (
-                      <ParamRow
-                        key={p.originalIndex}
-                        tIdx={tIdx}
-                        pIdx={p.originalIndex}
-                        param={p}
-                        tests={tests}
-                        errors={errors}
-                        numericChange={numericChange}
-                        textChange={textChange}
-                        pickSug={pickSug}
-                        calcOne={calcFormulaOnce}
-                        setSuggest={setSuggest}
-                        setShowSug={setShowSug}
-                      />
-                    ))}
-                  </>
-                )}
-
-                {sh.length
-                  ? sh.map((s, shIdx) => {
-                      const tag = `${tIdx}-${shIdx}`
-                      const list = test.parameters
-                        .map((p, i) => ({ ...p, originalIndex: i }))
-                        .filter((p) => s.parameterNames.includes(p.name))
-                      const need100 = s.is100 === true || s.is100 === "true"
-                      const last = list[list.length - 1]
-
-                      return (
-                        <div key={shIdx} className="mt-3">
-                          <h4 className={`font-bold text-sm mb-1 ${warn100[tag] ? "text-red-600" : ""}`}>
-                            {s.title}
-                            {need100 && <span className="text-xs text-gray-500 ml-2">(must total 100%)</span>}
-                          </h4>
-                          {list.map((p) => {
-                            const isLast = need100 && p.originalIndex === last.originalIndex
-                            return (
+                  <div className="grid gap-1">
+                    <p className="text-lg font-semibold text-gray-800">{patientDetails.name}</p>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <span className="font-medium">Patient ID:</span> {patientDetails.patientId}
+                      <Separator orientation="vertical" className="h-4" />
+                      <span className="font-medium">Reg ID:</span> {registrationId}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        Age: {patientDetails.age}
+                      </Badge>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        Gender: {patientDetails.gender}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            <form onSubmit={handleSubmit(onSubmit)}>
+              {tests.map((test, tIdx) => {
+                if (test.testType?.toLowerCase() === "outsource") {
+                  return (
+                    <Card key={test.testId} className="mb-3 border-l-4 border-yellow-500 bg-yellow-50 shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-yellow-800">
+                          <Droplet className="h-4 w-4" />
+                          <h3 className="font-semibold">{test.testName}</h3>
+                        </div>
+                        <p className="mt-2 text-sm text-yellow-800">
+                          This is an outsourced test. No data entry is required.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )
+                }
+                const sh = test.subheadings || []
+                const shNames = sh.flatMap((x) => x.parameterNames)
+                const globals = test.parameters
+                  .map((p, i) => ({ ...p, originalIndex: i }))
+                  .filter((p) => !shNames.includes(p.name))
+                return (
+                  <Card key={test.testId} className="mb-3 border-l-4 border-blue-500 bg-card shadow-sm">
+                    <CardHeader className="pb-1">
+                      <div className="flex items-center gap-2">
+                        <Droplet className="h-4 w-4 text-blue-600" />
+                        <CardTitle className="text-base text-gray-800">{test.testName}</CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-1">
+                      {sh.length > 0 && globals.length > 0 && (
+                        <>
+                          <h4 className="mb-2 text-sm font-semibold text-gray-700">Global Parameters</h4>
+                          <div className="grid gap-2">
+                            {globals.map((p) => (
                               <ParamRow
                                 key={p.originalIndex}
                                 tIdx={tIdx}
                                 pIdx={p.originalIndex}
-                                param={{ ...p, originalIndex: p.originalIndex }}
+                                param={p}
                                 tests={tests}
                                 errors={errors}
-                                pickSug={pickSug}
                                 numericChange={numericChange}
                                 textChange={textChange}
+                                pickSug={pickSug}
                                 calcOne={calcFormulaOnce}
-                                isLastOf100={isLast}
-                                fillRemaining={() => fillRemaining(tIdx, s, p.originalIndex)}
                                 setSuggest={setSuggest}
                                 setShowSug={setShowSug}
                               />
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {sh.length
+                        ? sh.map((s, shIdx) => {
+                            const tag = `${tIdx}-${shIdx}`
+                            const list = test.parameters
+                              .map((p, i) => ({ ...p, originalIndex: i }))
+                              .filter((p) => s.parameterNames.includes(p.name))
+                            const need100 = s.is100 === true || s.is100 === "true"
+                            const last = list[list.length - 1]
+                            return (
+                              <div key={shIdx} className="mt-4">
+                                <h4
+                                  className={cn(
+                                    "mb-2 text-sm font-semibold text-gray-700",
+                                    warn100[tag] && "text-red-600",
+                                  )}
+                                >
+                                  {s.title}
+                                  {need100 && (
+                                    <span className="ml-2 text-xs font-normal text-gray-500">(must total 100%)</span>
+                                  )}
+                                </h4>
+                                <div className="grid gap-2">
+                                  {list.map((p) => {
+                                    const isLast = need100 && p.originalIndex === last.originalIndex
+                                    return (
+                                      <ParamRow
+                                        key={p.originalIndex}
+                                        tIdx={tIdx}
+                                        pIdx={p.originalIndex}
+                                        param={{ ...p, originalIndex: p.originalIndex }}
+                                        tests={tests}
+                                        errors={errors}
+                                        pickSug={pickSug}
+                                        numericChange={numericChange}
+                                        textChange={textChange}
+                                        calcOne={calcFormulaOnce}
+                                        isLastOf100={isLast}
+                                        fillRemaining={() => fillRemaining(tIdx, s, p.originalIndex)}
+                                        setSuggest={setSuggest}
+                                        setShowSug={setShowSug}
+                                      />
+                                    )
+                                  })}
+                                </div>
+                              </div>
                             )
-                          })}
-                        </div>
-                      )
-                    })
-                  : test.parameters.map((p, pIdx) => (
-                      <ParamRow
-                        key={pIdx}
-                        tIdx={tIdx}
-                        pIdx={pIdx}
-                        param={{ ...p, originalIndex: pIdx }}
-                        tests={tests}
-                        errors={errors}
-                        numericChange={numericChange}
-                        textChange={textChange}
-                        calcOne={calcFormulaOnce}
-                        setSuggest={setSuggest}
-                        setShowSug={setShowSug}
-                        pickSug={pickSug}
-                      />
-                    ))}
+                          })
+                        : test.parameters.map((p, pIdx) => (
+                            <ParamRow
+                              key={pIdx}
+                              tIdx={tIdx}
+                              pIdx={pIdx}
+                              param={{ ...p, originalIndex: pIdx }}
+                              tests={tests}
+                              errors={errors}
+                              numericChange={numericChange}
+                              textChange={textChange}
+                              calcOne={calcFormulaOnce}
+                              setSuggest={setSuggest}
+                              setShowSug={setShowSug}
+                              pickSug={pickSug}
+                            />
+                          ))}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+              <div className="mt-6 border-t pt-4 flex gap-2">
+                <Button type="submit" disabled={isSubmitting} className="flex-1 py-2 text-lg">
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Saving…
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="mr-2 h-5 w-5" />
+                      Save Results
+                    </>
+                  )}
+                </Button>
               </div>
-            )
-          })}
-
-          <div className="border-t pt-3 mt-4">
-            <button disabled={isSubmitting} className="btn-blue w-full flex gap-2 justify-center">
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="animate-spin w-5 h-5" />
-                  Saving…
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-5 h-5" />
-                  Save
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-
-        {showSug && suggest.length > 0 && (
-          <div
-            className="fixed z-50 bg-white border rounded shadow max-h-40 overflow-auto py-1"
-            style={{
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              width: `${showSug.width}px`,
-              maxWidth: "90vw",
-              maxHeight: "80vh",
-            }}
-          >
-            {suggest.map((s, i) => (
-              <div
-                key={i}
-                className="px-2 py-1 hover:bg-gray-100 cursor-pointer text-sm"
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  pickSug(s, showSug.t, showSug.p)
-                }}
-              >
-                {s}
-              </div>
-            ))}
-          </div>
-        )}
+            </form>
+          </CardContent>
+          {showSug && suggest.length > 0 && (
+            <Card
+              className="fixed z-50 max-h-40 overflow-auto p-1 shadow-lg"
+              style={{
+                top: showSug.y,
+                left: showSug.x,
+                width: `${showSug.width}px`,
+                transform: "translateY(0)",
+              }}
+            >
+              <CardContent className="p-0">
+                {suggest.map((s, i) => (
+                  <div
+                    key={i}
+                    className="cursor-pointer px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      pickSug(s, showSug.t, showSug.p)
+                    }}
+                  >
+                    {s}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </Card>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
 
 /* ─────────────────── ParamRow Component ─────────────────── */
+
 interface RowProps {
   tIdx: number
   pIdx: number
@@ -755,7 +811,6 @@ const ParamRow: React.FC<RowProps> = ({
   const value = currentParam.value
   const numValue = Number.parseFloat(value as string)
   const parsedRange = parseRange(currentParam.range)
-
   let isOutOfRange = false
   if (!isNaN(numValue)) {
     const { min, max } = parsedRange
@@ -766,13 +821,6 @@ const ParamRow: React.FC<RowProps> = ({
     } else if (max !== undefined) {
       isOutOfRange = numValue > max
     }
-  }
-
-  const common = {
-    className: `input w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm ${
-      isOutOfRange ? "bg-red-100 border-red-300" : ""
-    }`,
-    placeholder: param.valueType === "number" ? "Value or >10 / <10" : "Text",
   }
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -805,80 +853,105 @@ const ParamRow: React.FC<RowProps> = ({
   }
 
   return (
-    <div className="pl-2 mb-1">
-      <div className="flex items-center text-sm border rounded px-2 py-1">
-        <div className="flex-1 flex items-center">
-          <span className="font-medium text-gray-700">
-            {param.name}
-            {param.unit && <span className="ml-1 text-xs text-gray-500">({param.unit})</span>}
-          </span>
-          {param.formula && param.valueType === "number" && (
-            <button
-              type="button"
-              onClick={() => calcOne(tIdx, pIdx)}
-              className="ml-2 text-blue-600 hover:text-blue-800"
-            >
-              <Calculator className="w-3 h-3" />
-            </button>
-          )}
-          {isLastOf100 && (
-            <button
-              type="button"
-              onClick={fillRemaining}
-              className="ml-2 text-green-600 hover:text-green-800 text-xs border border-green-600 px-1 rounded"
-            >
-              Calculate
-            </button>
-          )}
-        </div>
-
-        {param.valueType === "number" ? (
-          <div className="mx-2 w-28 relative">
-            <input
-              {...common}
-              onKeyDown={handleKeyDown}
-              type="text"
-              value={String(currentParam.value ?? "")}
-              onChange={(e) => numericChange(e.target.value, tIdx, pIdx)}
-            />
-            {errors.tests?.[tIdx]?.parameters?.[pIdx]?.value && (
-              <AlertCircle className="absolute right-1 top-1.5 w-4 h-4 text-red-500" />
-            )}
-          </div>
-        ) : (
-          <div className="mx-2 w-32">
-            <input
-              {...common}
-              type="text"
-              value={String(currentParam.value ?? "")}
-              onFocus={handleFocus}
-              onChange={handleChange}
-              onBlur={handleBlur}
-            />
-          </div>
+    <div className="flex items-center rounded-lg border bg-background px-3 py-1.5 text-sm shadow-sm">
+      <div className="flex flex-1 items-center gap-2">
+        <Label htmlFor={`param-${tIdx}-${pIdx}`} className="font-medium text-foreground">
+          {param.name}
+          {param.unit && <span className="ml-1 text-xs text-muted-foreground">({param.unit})</span>}
+        </Label>
+        {param.formula && param.valueType === "number" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                onClick={() => calcOne(tIdx, pIdx)}
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                aria-label="Calculate formula"
+              >
+                <Calculator className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Calculate value using formula: {param.formula}</p>
+            </TooltipContent>
+          </Tooltip>
         )}
-
-        <div className="flex-1 text-right text-gray-600">
-          Normal Range: <span className="font-medium text-green-600">{currentParam.range}</span>
+        {isLastOf100 && (
+          <Button
+            type="button"
+            onClick={fillRemaining}
+            variant="outline"
+            size="sm"
+            className="ml-2 h-7 text-xs text-green-600 border-green-600 hover:bg-green-50 hover:text-green-800 bg-transparent"
+          >
+            Calculate Rem.
+          </Button>
+        )}
+      </div>
+      {param.valueType === "number" ? (
+        <div className="relative ml-2 w-32">
+          <Input
+            id={`param-${tIdx}-${pIdx}`}
+            type="text"
+            value={String(currentParam.value ?? "")}
+            onChange={(e) => numericChange(e.target.value, tIdx, pIdx)}
+            onKeyDown={handleKeyDown}
+            placeholder={"Value or >10 / <10"}
+            className={cn("pr-8 h-9", isOutOfRange && "border-red-500 bg-red-50 focus-visible:ring-red-500")}
+          />
+          {isOutOfRange && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AlertCircle className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-red-500" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Value is outside normal range: {currentParam.range}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
+      ) : (
+        <div className="relative ml-2 w-36">
+          <Input
+            id={`param-${tIdx}-${pIdx}`}
+            type="text"
+            value={String(currentParam.value ?? "")}
+            onFocus={handleFocus}
+            onChange={handleChange}
+            onBlur={handleBlur}
+            placeholder={"Text"}
+            className="h-9"
+          />
+        </div>
+      )}
+      <div className="ml-4 flex-1 text-right text-muted-foreground">
+        Normal Range:{" "}
+        <span className={cn("font-medium", isOutOfRange ? "text-red-600" : "text-green-600")}>
+          {currentParam.range}
+        </span>
       </div>
     </div>
   )
 }
 
 /* ─────────────────── CenterCard Component ─────────────────── */
+
 const CenterCard: React.FC<{
   icon: any
   title?: string
   spin?: boolean
   children: React.ReactNode
 }> = ({ icon: Icon, title, spin, children }) => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-    <div className="bg-white p-8 rounded-xl shadow text-center max-w-md">
-      <Icon className={`w-12 h-12 text-blue-600 mx-auto mb-4 ${spin ? "animate-spin" : ""}`} />
-      {title && <h2 className="font-bold text-xl mb-2">{title}</h2>}
-      {children}
-    </div>
+  <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <Card className="w-full max-w-md text-center shadow-lg">
+      <CardContent className="p-8">
+        <Icon className={cn("mx-auto mb-4 h-12 w-12 text-primary", spin && "animate-spin")} />
+        {title && <CardTitle className="mb-2 text-xl text-gray-800">{title}</CardTitle>}
+        {children}
+      </CardContent>
+    </Card>
   </div>
 )
 

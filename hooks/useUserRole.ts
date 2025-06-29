@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+"use client"
+
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
+import { onAuthStateChange, type AuthUser } from "@/lib/auth" // Import onAuthStateChange and AuthUser type
 
 export function useUserRole() {
   const [role, setRole] = useState<string | null>(null)
@@ -8,29 +11,46 @@ export function useUserRole() {
 
   useEffect(() => {
     let cancelled = false
-    async function fetchUserRole() {
+
+    async function fetchUserRole(user: AuthUser | null = null) {
       setLoading(true)
       setError(null)
-      // 1. Get current logged in user
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      if (userError || !user) {
+
+      let currentUser = user
+      if (!currentUser) {
+        // If user not provided (e.g., initial load), fetch it
+        const {
+          data: { user: fetchedUser },
+          error: userError,
+        } = await supabase.auth.getUser()
+        if (userError || !fetchedUser) {
+          if (!cancelled) {
+            setRole(null)
+            setError("No authenticated user")
+            setLoading(false)
+          }
+          return
+        }
+        currentUser = fetchedUser as AuthUser
+      }
+
+      if (!currentUser) {
+        // Double check if user is still null after fetching
         if (!cancelled) {
           setRole(null)
-          setError('No authenticated user')
+          setError("No authenticated user")
           setLoading(false)
         }
         return
       }
-      // 2. Query 'user' table by uid
-      const { data, error } = await supabase
-        .from('user')
-        .select('role')
-        .eq('uid', user.id)
-        .single()
+
+      // Query 'user' table by uid to get the role
+      const { data, error: dbError } = await supabase.from("user").select("role").eq("uid", currentUser.id).single()
+
       if (!cancelled) {
-        if (error || !data) {
+        if (dbError || !data) {
           setRole(null)
-          setError('Role not found')
+          setError("Role not found or database error")
         } else {
           setRole(data.role)
           setError(null)
@@ -38,9 +58,31 @@ export function useUserRole() {
         setLoading(false)
       }
     }
+
+    // Initial fetch of the user role
     fetchUserRole()
-    return () => { cancelled = true }
-  }, [])
+
+    // Listen for authentication state changes [^2]
+    const { data: authListener } = onAuthStateChange((user) => {
+      if (user) {
+        // User signed in, re-fetch role
+        fetchUserRole(user)
+      } else {
+        // User signed out, clear role and error
+        if (!cancelled) {
+          setRole(null)
+          setError(null)
+          setLoading(false)
+        }
+      }
+    })
+
+    // Cleanup function for the effect
+    return () => {
+      cancelled = true
+      authListener?.subscription?.unsubscribe() // Unsubscribe from the auth listener
+    }
+  }, []) // Empty dependency array means this effect runs once on mount, but the listener handles subsequent updates
 
   return { role, loading, error }
 }

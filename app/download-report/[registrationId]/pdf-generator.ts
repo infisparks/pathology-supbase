@@ -1,8 +1,12 @@
 import { jsPDF } from "jspdf"
+
 import letterhead from "@/public/letterhead.png"
 import firstpage from "@/public/first.png"
 import stamp from "@/public/stamp.png"
 import stamp2 from "@/public/stamp2.png"
+import diteImg from "@/public/dite.png" // Import diet image
+import eatImg from "@/public/eat.png" // Import exercise image
+
 import type {
   Parameter,
   BloodTestData,
@@ -14,11 +18,14 @@ import type {
   CSSStyles,
   HistoricalTestEntry,
   ComparisonTestSelection,
+  AiSuggestions, // Import the new type
+  AiRecommendationSection, // Declare the new type
 } from "./types/report"
 
 // -----------------------------
 // Helper Functions
 // -----------------------------
+
 const loadImageAsCompressedJPEG = async (url: string, quality = 0.5) => {
   const res = await fetch(url)
   const blob = await res.blob()
@@ -35,6 +42,7 @@ const loadImageAsCompressedJPEG = async (url: string, quality = 0.5) => {
     }
     img.onerror = reject
     img.src = URL.createObjectURL(blob)
+    img.crossOrigin = "anonymous" // Set crossOrigin to avoid CORS issues [^vercel_knowledge_base]
   })
 }
 
@@ -55,6 +63,7 @@ const parseNumericRangeString = (str: string) => {
     const upper = Number.parseFloat(up[1])
     return isNaN(upper) ? null : { lower: 0, upper }
   }
+
   const m = /^\s*([\d.]+)\s*(?:-|to)\s*([\d.]+)\s*$/i.exec(str)
   if (!m) return null
   const lower = Number.parseFloat(m[1]),
@@ -97,7 +106,6 @@ const decodeHTMLEntities = (text: string): string => {
     "&delta;": "δ",
     "&omega;": "ω",
   }
-
   return text.replace(/&[a-zA-Z0-9#]+;/g, (entity) => {
     return entities[entity] || entity
   })
@@ -105,7 +113,6 @@ const decodeHTMLEntities = (text: string): string => {
 
 const parseColor = (color: string): [number, number, number] | null => {
   if (!color) return null
-
   if (color.startsWith("#")) {
     const hex = color.slice(1)
     if (hex.length === 3) {
@@ -122,12 +129,10 @@ const parseColor = (color: string): [number, number, number] | null => {
       ]
     }
   }
-
   const rgbMatch = color.match(/rgb\s*$$\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$$/)
   if (rgbMatch) {
     return [Number.parseInt(rgbMatch[1]), Number.parseInt(rgbMatch[2]), Number.parseInt(rgbMatch[3])]
   }
-
   const namedColors: Record<string, [number, number, number]> = {
     red: [255, 0, 0],
     green: [0, 128, 0],
@@ -150,20 +155,16 @@ const parseColor = (color: string): [number, number, number] | null => {
     maroon: [128, 0, 0],
     olive: [128, 128, 0],
   }
-
   const lowerColor = color.toLowerCase()
   return namedColors[lowerColor] || null
 }
 
 const parseCSSUnit = (value: string, baseFontSize = 9): number => {
   if (!value) return 0
-
   const numMatch = value.match(/^([\d.]+)(px|pt|em|rem|%)?$/i)
   if (!numMatch) return 0
-
   const num = Number.parseFloat(numMatch[1])
   const unit = numMatch[2]?.toLowerCase() || "px"
-
   switch (unit) {
     case "pt":
       return num
@@ -181,17 +182,12 @@ const parseCSSUnit = (value: string, baseFontSize = 9): number => {
 
 const parseInlineCSS = (styleAttr: string): CSSStyles => {
   const styles: CSSStyles = {}
-
   if (!styleAttr) return styles
-
   const declarations = styleAttr.split(";").filter(Boolean)
-
   declarations.forEach((declaration) => {
     const [property, value] = declaration.split(":").map((s) => s.trim())
     if (!property || !value) return
-
     const prop = property.toLowerCase()
-
     switch (prop) {
       case "color":
         styles.color = value
@@ -244,7 +240,6 @@ const parseInlineCSS = (styleAttr: string): CSSStyles => {
         break
     }
   })
-
   return styles
 }
 
@@ -265,7 +260,6 @@ const applyCSSStyles = (doc: jsPDF, styles: CSSStyles, defaultFontSize = 9) => {
     fontStyle = fontStyle === "bold" ? "bolditalic" : "italic"
   }
   doc.setFont("helvetica", fontStyle)
-
   if (styles.color) {
     const color = parseColor(styles.color)
     if (color) {
@@ -277,12 +271,9 @@ const applyCSSStyles = (doc: jsPDF, styles: CSSStyles, defaultFontSize = 9) => {
 const parseTable = (tableElement: Element): ParsedTable => {
   const rows: TableRow[] = []
   let hasHeader = false
-
   const tableStyles = parseInlineCSS(tableElement.getAttribute("style") || "")
-
   const thead = tableElement.querySelector("thead")
   const tbody = tableElement.querySelector("tbody")
-
   if (thead) {
     hasHeader = true
     const headerRows = thead.querySelectorAll("tr")
@@ -307,7 +298,6 @@ const parseTable = (tableElement: Element): ParsedTable => {
   const bodyRows = tbody ? tbody.querySelectorAll("tr") : tableElement.querySelectorAll("tr")
   bodyRows.forEach((row) => {
     if (thead && thead.contains(row)) return
-
     const rowStyles = parseInlineCSS(row.getAttribute("style") || "")
     const cells: TableCell[] = []
     const cellElements = row.querySelectorAll("th, td")
@@ -323,7 +313,6 @@ const parseTable = (tableElement: Element): ParsedTable => {
     })
     rows.push({ cells, styles: rowStyles })
   })
-
   return { rows, hasHeader, styles: tableStyles }
 }
 
@@ -333,10 +322,8 @@ const renderTable = (doc: jsPDF, table: ParsedTable, x: number, y: number, maxWi
   const lineHeight = 5
   const defaultCellPadding = 2
   const defaultBorderWidth = 0.5
-
   const maxCols = Math.max(...table.rows.map((row) => row.cells.length))
   const colWidth = maxWidth / maxCols
-
   let currentY = y
 
   table.rows.forEach((row, rowIndex) => {
@@ -346,7 +333,6 @@ const renderTable = (doc: jsPDF, table: ParsedTable, x: number, y: number, maxWi
     row.cells.forEach((cell, cellIndex) => {
       const cellPadding = cell.styles?.padding || defaultCellPadding
       const cellWidth = colWidth * (cell.colspan || 1) - 2 * cellPadding
-
       if (cell.styles) {
         applyCSSStyles(doc, cell.styles)
       } else if (cell.isHeader) {
@@ -354,7 +340,6 @@ const renderTable = (doc: jsPDF, table: ParsedTable, x: number, y: number, maxWi
       } else {
         doc.setFont("helvetica", "normal").setFontSize(8)
       }
-
       const lines = doc.splitTextToSize(cell.content.replace(/<[^>]*>/g, ""), cellWidth)
       const cellHeight = Math.max(lines.length * lineHeight + 2 * cellPadding, lineHeight + 2 * cellPadding)
       cellHeights.push(cellHeight)
@@ -408,8 +393,8 @@ const renderTable = (doc: jsPDF, table: ParsedTable, x: number, y: number, maxWi
 
       const textWidth = cellWidth - 2 * cellPadding
       const lines = doc.splitTextToSize(cell.content.replace(/<[^>]*>/g, ""), textWidth)
-
       const textAlign = cell.styles?.textAlign || "left"
+
       lines.forEach((line: string, lineIndex: number) => {
         let textX = currentX + cellPadding
         if (textAlign === "center") {
@@ -417,18 +402,14 @@ const renderTable = (doc: jsPDF, table: ParsedTable, x: number, y: number, maxWi
         } else if (textAlign === "right") {
           textX = currentX + cellWidth - cellPadding
         }
-
         doc.text(line, textX, currentY + cellPadding + (lineIndex + 1) * lineHeight, {
           align: textAlign as any,
         })
       })
-
       currentX += cellWidth
     })
-
     currentY += maxRowHeight
   })
-
   return currentY + 5
 }
 
@@ -436,7 +417,6 @@ const parseHTMLContent = (doc: jsPDF, htmlContent: string, x: number, y: number,
   const parser = new DOMParser()
   const htmlDoc = parser.parseFromString(`<div>${htmlContent}</div>`, "text/html")
   const container = htmlDoc.querySelector("div")
-
   let currentY = y
   const lineHeight = 5
 
@@ -453,13 +433,13 @@ const parseHTMLContent = (doc: jsPDF, htmlContent: string, x: number, y: number,
       const text = decodeHTMLEntities(node.textContent?.trim() || "")
       if (text) {
         const lines = doc.splitTextToSize(text, maxWidth)
+        doc.setFont("helvetica", "normal").setFontSize(9)
         doc.text(lines, x, currentY)
         currentY += lines.length * lineHeight
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const element = node as Element
       const tagName = element.tagName.toLowerCase()
-
       const styles = parseInlineCSS(element.getAttribute("style") || "")
 
       if (tagName === "table") {
@@ -549,7 +529,6 @@ const parseHTMLContent = (doc: jsPDF, htmlContent: string, x: number, y: number,
       if (["h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "div"].includes(tagName)) {
         currentY += styles.margin || 1
       }
-
       doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0)
     }
   }
@@ -557,7 +536,6 @@ const parseHTMLContent = (doc: jsPDF, htmlContent: string, x: number, y: number,
   for (let i = 0; i < container.childNodes.length; i++) {
     processNode(container.childNodes[i])
   }
-
   return currentY
 }
 
@@ -568,8 +546,304 @@ const slugifyTestName = (name: string) =>
     .replace(/[.#$[\]()]/g, "")
 
 // -----------------------------
-// Main PDF Generation Function
+// AI Suggestion Generation Function
 // -----------------------------
+export const generateAiSuggestions = async (
+  patientData: PatientData,
+  bloodtestData: Record<string, BloodTestData>,
+): Promise<AiSuggestions> => {
+  const apiKey = "AIzaSyA0G8Jhg6yJu-D_OI97_NXgcJTlOes56P8" // Using the API key from the glucose monitoring component
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+
+  const defaultResponse: AiSuggestions = {
+    diet: {
+      title: "Diet Recommendations",
+      description: "Based on your general health, here are some diet suggestions:",
+      items: [
+        {
+          heading: "Balanced Diet",
+          content: "Focus on a balanced diet with plenty of fruits, vegetables, and lean proteins.",
+        },
+        { heading: "Hydration", content: "Ensure adequate water intake throughout the day." },
+      ],
+    },
+    exercise: {
+      title: "Exercise Recommendations",
+      description: "To maintain good health, consider these exercise tips:",
+      items: [
+        {
+          heading: "Regular Activity",
+          content: "Aim for at least 30 minutes of moderate physical activity most days.",
+        },
+        { heading: "Strength & Flexibility", content: "Incorporate strength training and stretching exercises." },
+      ],
+    },
+  }
+
+  // Prepare blood test summary for AI prompt
+  let bloodTestSummary = ""
+  if (bloodtestData) {
+    for (const testKey in bloodtestData) {
+      const test = bloodtestData[testKey]
+      bloodTestSummary += `\nTest: ${testKey.replace(/_/g, " ")}\n`
+      test.parameters.forEach((param) => {
+        let rangeStr = ""
+        if (typeof param.range === "string") {
+          rangeStr = param.range
+        } else {
+          const genderKey = patientData.gender?.toLowerCase() ?? ""
+          const ageDays = patientData.total_day ? Number(patientData.total_day) : Number(patientData.age) * 365
+          const arr = param.range[genderKey as keyof typeof param.range] || []
+          for (const r of arr) {
+            const { lower, upper } = parseRangeKey(r.rangeKey)
+            if (ageDays >= lower && ageDays <= upper) {
+              rangeStr = r.rangeValue
+              break
+            }
+          }
+          if (!rangeStr && arr.length) rangeStr = arr[arr.length - 1].rangeValue
+        }
+
+        const numVal = Number.parseFloat(String(param.value).trim())
+        const numRange = parseNumericRangeString(rangeStr)
+        let status = ""
+        if (numRange && !isNaN(numVal)) {
+          if (numVal < numRange.lower) status = " (LOW)"
+          else if (numVal > numRange.upper) status = " (HIGH)"
+          else status = " (NORMAL)"
+        }
+        bloodTestSummary += `- ${param.name}: ${param.value} ${param.unit} (Range: ${rangeStr})${status}\n`
+      })
+    }
+  }
+
+  const prompt = `Generate short, professional, and actionable diet and exercise recommendations for a patient based on their blood test report.
+The patient's details are: Name: ${patientData.name}, Age: ${patientData.age} ${patientData.total_day ? "Days" : "Years"}, Gender: ${patientData.gender}.
+Here are the relevant blood test results:\n${bloodTestSummary}
+
+Provide the response as JSON with this structure:
+{
+  "diet": {
+    "title": "Dietary Recommendations",
+    "description": "Based on your blood test results, here are some dietary suggestions:",
+    "items": [
+      {"heading": "Short heading for diet item 1", "content": "Detailed content for diet item 1."},
+      {"heading": "Short heading for diet item 2", "content": "Detailed content for diet item 2."}
+    ]
+  },
+  "exercise": {
+    "title": "Exercise Recommendations",
+    "description": "To complement your diet, consider these exercise tips:",
+    "items": [
+      {"heading": "Short heading for exercise item 1", "content": "Detailed content for exercise item 1."},
+      {"heading": "Short heading for exercise item 2", "content": "Detailed content for exercise item 2."}
+    ]
+  }
+}
+Ensure the content is concise and directly related to the blood test values if possible, otherwise provide general health advice.
+`
+
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+    },
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!response.ok) {
+      console.error("Gemini API error:", await response.text())
+      return defaultResponse
+    }
+
+    const result = await response.json()
+    const recommendations = JSON.parse(result.candidates[0].content.parts[0].text)
+    return recommendations as AiSuggestions
+  } catch (e) {
+    console.error("Error fetching or parsing Gemini API response:", e)
+    return defaultResponse
+  }
+}
+
+// -----------------------------
+// AI Suggestions Page Renderer (Updated)
+// -----------------------------
+const renderAiSuggestionsPage = async (
+  doc: jsPDF,
+  patientData: PatientData,
+  aiSuggestions: AiSuggestions,
+  w: number,
+  h: number,
+  left: number,
+  headerY: (reportedOnRaw?: string) => number,
+  addStampsAndPrintedBy: (doc: jsPDF, w: number, h: number, left: number, enteredBy: string) => Promise<void>,
+  ensureSpace: (y: number, minHeightNeeded: number, reportedOnRaw?: string) => Promise<number>,
+  printedBy: string,
+  dietImage: string, // Loaded image data
+  exerciseImage: string, // Loaded image data
+) => {
+  const totalW = w - 2 * left
+  let currentY = headerY(patientData.createdAt) // Start below the header
+
+  // Main Title for AI Suggestions page
+  currentY = await ensureSpace(currentY, 30, patientData.createdAt)
+  doc.setFont("helvetica", "bold").setFontSize(16).setTextColor(0, 51, 102)
+  doc.text("AI Expert Suggestion According to Report Value", w / 2, currentY + 10, { align: "center" })
+  currentY += 20
+
+  const cardPadding = 5
+  const imageSize = 30 // Size for the diet/exercise image
+  const textGap = 5 // Gap between image and text content
+
+  // INSERT_YOUR_REWRITE_HERE
+  const renderSingleRecommendationCard = async (
+    section: AiRecommendationSection,
+    image: string,
+    startY: number,
+  ): Promise<number> => {
+    const cardX = left
+    const cardWidth = totalW
+    const imageWidth = imageSize
+    const imageHeight = imageSize
+    const textContentX = cardX + cardPadding + imageWidth + textGap
+    const textContentWidth = cardWidth - 2 * cardPadding - imageWidth - textGap
+
+    let textBlockHeight = 0 // Height of the text content block, excluding card padding
+
+    // Calculate height for title
+    doc.setFont("helvetica", "bold").setFontSize(12)
+    const titleHeight = doc.getTextDimensions(section.title, { fontSize: 12 }).h
+    textBlockHeight += titleHeight
+    textBlockHeight += 2 // Small margin after title
+
+    // Calculate height for description
+    doc.setFont("helvetica", "normal").setFontSize(8)
+    const descriptionLines = doc.splitTextToSize(section.description, textContentWidth)
+    const descriptionHeight = descriptionLines.length * 4 // Using fixed line height for consistency
+    textBlockHeight += descriptionHeight
+    textBlockHeight += 2 // Small margin after description
+
+    // Calculate height for items
+    for (const item of section.items) {
+      // Heading height
+      doc.setFont("helvetica", "bold").setFontSize(9)
+      const headingHeight = doc.getTextDimensions(`• ${item.heading}:`, { fontSize: 9 }).h
+      textBlockHeight += headingHeight
+
+      // Content height
+      doc.setFont("helvetica", "normal").setFontSize(8)
+      const itemContentLines = doc.splitTextToSize(
+        item.content,
+        textContentWidth - doc.getTextWidth(`• ${item.heading}: `),
+      )
+      const itemContentHeight = itemContentLines.length * 4 // Using fixed line height for consistency
+      textBlockHeight += itemContentHeight
+      textBlockHeight += 1 // Small margin after item content
+    }
+
+    const cardHeight = Math.max(textBlockHeight + 2 * cardPadding, imageHeight + 2 * cardPadding) // Total card height including padding
+
+    const cardCurrentY = await ensureSpace(startY, cardHeight + 10, patientData.createdAt) // Ensure space for the card + gap
+
+    // Now, draw the card and its content using cardCurrentY as the absolute Y start
+    doc.setDrawColor(0, 0, 0).setLineWidth(0.2)
+    doc.setFillColor(245, 245, 245) // Light gray background for cards
+    doc.rect(cardX, cardCurrentY, cardWidth, cardHeight, "FD")
+
+    // Image on the left
+    doc.addImage(image, "JPEG", cardX + cardPadding, cardCurrentY + cardPadding, imageWidth, imageHeight)
+
+    // Text content area starts after the image
+    let textDrawY = cardCurrentY + cardPadding // Start drawing text from here
+
+    // Draw title
+    doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(0, 51, 102)
+    doc.text(section.title, textContentX, textDrawY + titleHeight / 2) // Vertically center title in its line
+    textDrawY += titleHeight + 2
+
+    // Draw description
+    doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(50, 50, 50)
+    doc.text(descriptionLines, textContentX, textDrawY)
+    textDrawY += descriptionHeight + 2
+
+    // Draw items
+    doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(0, 0, 0)
+    for (const item of section.items) {
+      // Inside the loop for section.items:
+      // textY is the current Y position for the start of the item.
+      // Ensure space before drawing this item
+      doc.setFont("helvetica", "bold").setFontSize(9)
+      const headingText = `• ${item.heading}:`
+      const headingWidth = doc.getTextWidth(headingText)
+      const headingLineHeight = 4 // Approx for 9pt font
+
+      doc.setFont("helvetica", "normal").setFontSize(8)
+      const itemContentLineHeight = 4 // Approx for 8pt font
+
+      // Determine how much of the content fits on the first line after the heading
+      const firstLineContentWidth = textContentWidth - headingWidth
+      const firstLineContent = doc.splitTextToSize(item.content, firstLineContentWidth)[0] || ""
+      const remainingContent = item.content.substring(firstLineContent.length).trim()
+
+      // Calculate height of subsequent content lines (aligned with textContentX)
+      const subsequentContentLines = doc.splitTextToSize(remainingContent, textContentX) // Use textContentX for full width
+      const subsequentContentHeight = subsequentContentLines.length * itemContentLineHeight
+
+      // Total height for this item (heading line + subsequent content lines)
+      const totalItemHeight = headingLineHeight + subsequentContentHeight
+
+      textDrawY = await ensureSpace(textDrawY, totalItemHeight + 1, patientData.createdAt) // +1 for small gap after item
+
+      // Draw heading
+      doc.setFont("helvetica", "bold").setFontSize(9)
+      doc.text(headingText, textContentX, textDrawY)
+
+      // Draw first part of content on the same line
+      doc.setFont("helvetica", "normal").setFontSize(8)
+      doc.text(firstLineContent, textContentX + headingWidth, textDrawY)
+
+      // Move to the next line for the rest of the content
+      let currentContentY = textDrawY + headingLineHeight
+
+      // Draw subsequent content lines, aligned with the main text content area
+      if (subsequentContentLines.length > 0) {
+        doc.text(subsequentContentLines, textContentX, currentContentY)
+        currentContentY += subsequentContentLines.length * itemContentLineHeight
+      }
+
+      // Update textY for the next item, adding a small gap
+      textDrawY = currentContentY + 1
+    }
+    return cardCurrentY + cardHeight + 10 // Return Y position after this card + gap
+  }
+
+  // Render Diet Card
+  currentY = await renderSingleRecommendationCard(aiSuggestions.diet, dietImage, currentY)
+
+  // Render Exercise Card below Diet Card
+  currentY = await renderSingleRecommendationCard(aiSuggestions.exercise, exerciseImage, currentY)
+
+  return currentY
+}
+
+// -----------------------------
+// Main PDF Generation Function (Updated)
+// -----------------------------
+
 export const generateReportPdf = async (
   data: PatientData,
   selectedTests: string[],
@@ -579,14 +853,13 @@ export const generateReportPdf = async (
   reportType: "normal" | "comparison" | "combined",
   includeLetterhead: boolean,
   skipCover: boolean,
+  aiSuggestions?: AiSuggestions,
+  includeAiSuggestionsPage = false,
 ) => {
   const doc = new jsPDF("p", "mm", "a4")
-  // pick one of the selected tests (e.g. the first one) to grab its enteredBy
-const firstTestKey = Object.keys(data.bloodtest || {})[0]  
-const printedBy =
-  data.bloodtest?.[firstTestKey]?.enteredBy  
-  ?? "Lab System"
-
+  
+  const firstTestKey = Object.keys(data.bloodtest || {})[0]
+  const printedBy = data.bloodtest?.[firstTestKey]?.enteredBy ?? "Lab System"
   const w = doc.internal.pageSize.getWidth()
   const h = doc.internal.pageSize.getHeight()
   const left = 23
@@ -603,60 +876,37 @@ const printedBy =
   const lineH = 5
   const ageDays = data.total_day ? Number(data.total_day) : Number(data.age) * 365
   const genderKey = data.gender?.toLowerCase() ?? ""
-  const footerMargin = 5 // User specified 48mm
+  const footerMargin = 23
 
-  // Constants for stamp positioning
   const STAMP_WIDTH = 40
   const STAMP_HEIGHT = 30
-  const STAMP_BOTTOM_MARGIN = 23 // Distance from bottom of page
+  const STAMP_BOTTOM_MARGIN = 21
 
-  // New helper for adding stamps and printed by text
-  const addStampsAndPrintedBy = async (
-    doc: jsPDF,
-    w: number,
-    h: number,
-    left: number,
-    enteredBy: string
-  ) => {
+  // Load all images once at the beginning
+  const [loadedLetterhead, loadedFirstPage, loadedStamp, loadedStamp2, loadedDietImage, loadedExerciseImage] =
+    await Promise.all([
+      includeLetterhead ? loadImageAsCompressedJPEG(letterhead.src, 0.5) : Promise.resolve(null),
+      !skipCover ? loadImageAsCompressedJPEG(firstpage.src, 0.5) : Promise.resolve(null),
+      loadImageAsCompressedJPEG(stamp.src, 0.5),
+      loadImageAsCompressedJPEG(stamp2.src, 0.5),
+      loadImageAsCompressedJPEG(diteImg.src, 0.7),
+      loadImageAsCompressedJPEG(eatImg.src, 0.7),
+    ])
+
+  const addStampsAndPrintedBy = async (doc: jsPDF, w: number, h: number, left: number, enteredBy: string) => {
     const sy = h - STAMP_HEIGHT - STAMP_BOTTOM_MARGIN
-
-    // Stamp 2 (right)
     const sx2 = w - left - STAMP_WIDTH
-    try {
-      const img2 = await loadImageAsCompressedJPEG(stamp2.src, 0.5)
-      doc.addImage(img2, "JPEG", sx2, sy, STAMP_WIDTH, STAMP_HEIGHT)
-    } catch (e) {
-      console.error("Stamp 2 load error:", e)
-    }
-
-    // Stamp 1 (center)
+    if (loadedStamp2) doc.addImage(loadedStamp2, "JPEG", sx2, sy, STAMP_WIDTH, STAMP_HEIGHT)
     const sx1 = (w - STAMP_WIDTH) / 2
-    try {
-      const img1 = await loadImageAsCompressedJPEG(stamp.src, 0.5)
-      doc.addImage(img1, "JPEG", sx1, sy, STAMP_WIDTH, STAMP_HEIGHT)
-    } catch (e) {
-      console.error("Stamp 1 load error:", e)
-    }
-
+    if (loadedStamp) doc.addImage(loadedStamp, "JPEG", sx1, sy, STAMP_WIDTH, STAMP_HEIGHT)
     doc.setFont("helvetica", "normal").setFontSize(10)
-    doc.text(`Printed by ${enteredBy}`, left, sy + STAMP_HEIGHT) // Position below the stamps
-  }
-
-  const addCover = async () => {
-    if (skipCover) return
-    try {
-      const img = await loadImageAsCompressedJPEG(firstpage.src, 0.5)
-      doc.addImage(img, "JPEG", 0, 0, w, h)
-    } catch (e) {
-      console.error("Error loading cover image:", e)
-    }
+    doc.text(`Printed by ${enteredBy}`, left, sy + STAMP_HEIGHT - 1)
   }
 
   const headerY = (reportedOnRaw?: string) => {
     const gap = 7
     let y = 50
     doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(0, 0, 0)
-
     const sampleDT = data.sampleCollectedAt ? new Date(data.sampleCollectedAt) : new Date(data.createdAt)
     const sampleDTStr = formatDMY(sampleDT)
     const registrationStr = formatDMY(data.createdAt)
@@ -677,13 +927,15 @@ const printedBy =
       },
       { label: "Client Name", value: (data.hospitalName || "-").toUpperCase() },
     ]
-    const mergedPatientId = data.patientId && data.registration_id
-    ? `${data.patientId}-${data.registration_id}`
-    : data.patientId || data.registration_id || "-";
-  
+
+    const mergedPatientId =
+      data.patientId && data.registration_id
+        ? `${data.patientId}-${data.registration_id}`
+        : data.patientId || data.registration_id || "-"
+
     const rightRows = [
       { label: "Patient ID", value: mergedPatientId },
-            { label: "Sample Collected on", value: sampleDTStr },
+      { label: "Sample Collected on", value: sampleDTStr },
       { label: "Registration On", value: registrationStr },
       { label: "Reported On", value: reportedOnStr },
     ]
@@ -694,10 +946,12 @@ const printedBy =
     const xLL = left
     const xLC = xLL + maxLeftLabel + 2
     const xLV = xLC + 2
+
     const startR = w / 2 + 10
     const xRL = startR
     const xRC = xRL + maxRightLabel + 2
     const xRV = xRC + 2
+
     const leftValueWidth = startR - xLV - 4
 
     for (let i = 0; i < leftRows.length; i++) {
@@ -720,18 +974,16 @@ const printedBy =
     return y
   }
 
-  // Helper to add new page with letterhead, header, and stamps
   const addNewPageWithHeader = async (reportedOnRaw?: string) => {
     doc.addPage()
-    if (includeLetterhead) {
-      await loadImageAsCompressedJPEG(letterhead.src, 0.5).then((img) => doc.addImage(img, "JPEG", 0, 0, w, h))
+    if (loadedLetterhead) {
+      doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
     }
-    const y = headerY(reportedOnRaw) // Get Y position after header
-    await addStampsAndPrintedBy(doc, w, h, left, printedBy) // Add stamps and printed by text on every page
+    const y = headerY(reportedOnRaw)
+    await addStampsAndPrintedBy(doc, w, h, left, printedBy)
     return y
   }
 
-  // Helper to check for page break and add new page if needed for *continuous* content
   const ensureSpace = async (y: number, minHeightNeeded: number, reportedOnRaw?: string): Promise<number> => {
     if (y + minHeightNeeded >= h - footerMargin) {
       return await addNewPageWithHeader(reportedOnRaw)
@@ -757,7 +1009,7 @@ const printedBy =
     rangeStr = rangeStr.replaceAll("/n", "\n")
 
     const rawValue = String(p.value).trim()
-    const valStr = p.value !== "" ? `${p.value}` : "-" // No L/H mark
+    const valStr = p.value !== "" ? `${p.value}` : "-"
 
     const rangeEmpty = rangeStr.trim() === ""
     const unitEmpty = p.unit.trim() === ""
@@ -768,7 +1020,6 @@ const printedBy =
     if (fullyMerged) valueSpan = wValue + wUnit + wRange
     else if (unitEmpty) valueSpan = wValue + wUnit
 
-    // Calculate estimated height for this row before printing
     const estimatedRowHeight =
       Math.max(
         nameLines.length,
@@ -777,19 +1028,19 @@ const printedBy =
         unitEmpty || fullyMerged ? 0 : doc.splitTextToSize(p.unit, wUnit - 4).length,
       ) * lineH
 
-    y = await ensureSpace(y, estimatedRowHeight, reportedOnRaw) // Check for page break before printing row
+    y = await ensureSpace(y, estimatedRowHeight, reportedOnRaw)
 
     doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0)
     doc.text(nameLines, x1, y + 4)
 
-    // Check if value is out of range and bold it
     const numRange = parseNumericRangeString(rangeStr)
     const numVal = Number.parseFloat(rawValue)
     const isValueOutOfRange = numRange && !isNaN(numVal) && (numVal < numRange.lower || numVal > numRange.upper)
-    doc.setFont("helvetica", isValueOutOfRange ? "bold" : "normal") // Apply bold based on isOutOfRange
-    doc.text(valStr, x2 + 2, y + 4)
 
+    doc.setFont("helvetica", isValueOutOfRange ? "bold" : "normal")
+    doc.text(valStr, x2 + 2, y + 4)
     doc.setFont("helvetica", "normal")
+
     if (!fullyMerged) {
       if (!unitEmpty) {
         doc.text(p.unit, x3 + 2, y + 4)
@@ -810,7 +1061,8 @@ const printedBy =
   }
 
   const printTest = async (testKey: string, tData: BloodTestData, y: number): Promise<number> => {
-    y = await ensureSpace(y, 20, tData.reportedOn) // Estimate space for title + header
+    y = await ensureSpace(y, 20, tData.reportedOn)
+
     doc.setDrawColor(0, 51, 102).setLineWidth(0.5)
     doc.line(left, y, w - left, y)
     doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(0, 51, 102)
@@ -819,7 +1071,7 @@ const printedBy =
 
     doc.setFontSize(10).setFillColor(0, 51, 102)
     const rowH = 7
-    y = await ensureSpace(y, rowH, tData.reportedOn) // Ensure space for table header
+    y = await ensureSpace(y, rowH, tData.reportedOn)
     doc.rect(left, y, totalW, rowH, "F")
     doc.setTextColor(255, 255, 255)
     doc.text("PARAMETER", x1 + 2, y + 5)
@@ -840,7 +1092,7 @@ const printedBy =
       const rows = tData.parameters.filter((p) => sh.parameterNames.includes(p.name))
       if (!rows.length) continue
 
-      y = await ensureSpace(y, 6 + lineH * 2, tData.reportedOn) // Estimate for subheading + first row
+      y = await ensureSpace(y, 6 + lineH * 2, tData.reportedOn)
       doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(0, 51, 102)
       doc.text(sh.title, x1, y + 5)
       y += 6
@@ -848,16 +1100,15 @@ const printedBy =
         y = await printRow(r, y, tData.reportedOn, 2)
       }
     }
-    y += 3
 
+    y += 3
     if (Array.isArray(tData.descriptions) && tData.descriptions.length) {
       y += 4
       for (const { heading, content } of tData.descriptions) {
-        y = await ensureSpace(y, lineH * 2, tData.reportedOn) // Estimate for heading
+        y = await ensureSpace(y, lineH * 2, tData.reportedOn)
         doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(0, 51, 102)
         doc.text(heading, x1, y + lineH)
         y += lineH + 2
-
         doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0)
         y = parseHTMLContent(doc, content, x1, y, totalW)
         y += 4
@@ -874,7 +1125,7 @@ const printedBy =
     yPos: number,
     w: number,
     left: number,
-    lineH: number, // This lineH is the general one, will use a specific one for comparison
+    lineH: number,
     ageDays: number,
     genderKey: string,
     h: number,
@@ -883,80 +1134,71 @@ const printedBy =
     ensureSpace: (y: number, minHeightNeeded: number, reportedOnRaw?: string) => Promise<number>,
   ): Promise<number> => {
     const totalW = w - 2 * left
-    const comparisonLineHeight = 4 // Decreased line height for comparison report
-    const comparisonRowPadding = 1 // Decreased padding between rows
+    const comparisonLineHeight = 4
+    const comparisonRowPadding = 1
 
     const selectedComparisonTests = Object.values(comparisonSelections).filter(
       (selection) =>
-        selection.selectedDates.length > 0 && data.bloodtest && data.bloodtest[selection.slugifiedTestName], // Added filter for current registration tests
+        selection.selectedDates.length > 0 && data.bloodtest && data.bloodtest[selection.slugifiedTestName],
     )
 
     let firstTestInComparisonReport = true
 
     for (const selection of selectedComparisonTests) {
-      // Sort relevant historical entries in descending order (latest first)
       const relevantHistoricalEntries = historicalTestsData[selection.slugifiedTestName]
         ?.filter((entry) => selection.selectedDates.includes(entry.reportedOn))
-        .sort((a, b) => new Date(b.reportedOn).getTime() - new Date(a.reportedOn).getTime()) // Changed to descending
+        .sort((a, b) => new Date(b.reportedOn).getTime() - new Date(a.reportedOn).getTime())
 
       if (!relevantHistoricalEntries || relevantHistoricalEntries.length === 0) continue
 
-      // Add new page for each test in comparison report, except the very first one
       if (!firstTestInComparisonReport) {
-        yPos = await addNewPageWithHeader(data.createdAt) // Use data.createdAt for comparison report header
+        yPos = await addNewPageWithHeader(data.createdAt)
       }
       firstTestInComparisonReport = false
 
-      // Determine column headers (dates) - already sorted descending due to relevantHistoricalEntries sort
       const dateHeaders = relevantHistoricalEntries.map((entry) =>
         new Date(entry.reportedOn).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
       )
       const numDateColumns = dateHeaders.length
 
-      // Calculate dynamic column widths
-      const fixedColWidthParam = totalW * 0.3 // Parameter Name
-      const fixedColWidthRange = totalW * 0.2 // Range (now on the left)
+      const fixedColWidthParam = totalW * 0.3
+      const fixedColWidthRange = totalW * 0.2
       const remainingWidthForValues = totalW - fixedColWidthParam - fixedColWidthRange
       const dynamicColWidth = remainingWidthForValues / numDateColumns
 
-      // Add test title
-      yPos = await ensureSpace(yPos, 20) // Ensure space for title
+      yPos = await ensureSpace(yPos, 20, data.createdAt)
       doc.setDrawColor(0, 51, 102).setLineWidth(0.5)
       doc.line(left, yPos, w - left, yPos)
       doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(0, 51, 102)
       doc.text(`${selection.testName.toUpperCase()} COMPARISON REPORT`, w / 2, yPos + 8, { align: "center" })
       yPos += 10
 
-      // Add table header
       doc.setFontSize(10).setFillColor(0, 51, 102)
       const rowH = 7
-      yPos = await ensureSpace(yPos, rowH) // Ensure space for table header
+      yPos = await ensureSpace(yPos, rowH, data.createdAt)
       doc.rect(left, yPos, totalW, rowH, "F")
       doc.setTextColor(255, 255, 255)
       let currentX = left
       doc.text("PARAMETER", currentX + 2, yPos + 5)
       currentX += fixedColWidthParam
-      doc.text("RANGE", currentX + 2, yPos + 5) // Range is now here
+      doc.text("RANGE", currentX + 2, yPos + 5)
       currentX += fixedColWidthRange
       dateHeaders.forEach((header) => {
-        doc.text(header, currentX + dynamicColWidth / 2, yPos + 5, { align: "center" }) // Centered date headers
+        doc.text(header, currentX + dynamicColWidth / 2, yPos + 5, { align: "center" })
         currentX += dynamicColWidth
       })
       yPos += rowH + 2
 
-      // Get the current test's full data to access subheadings
       const currentTestBloodData = data.bloodtest?.[selection.slugifiedTestName]
-      if (!currentTestBloodData) continue // Should not happen if selection exists
+      if (!currentTestBloodData) continue
 
       const subheads = currentTestBloodData.subheadings ?? []
       const subNames = subheads.flatMap((s) => s.parameterNames)
       const globalParameters = currentTestBloodData.parameters.filter((p) => !subNames.includes(p.name))
 
-      // Helper to print a single parameter row in comparison format
       const printComparisonParameterRow = async (param: Parameter, indent = 0): Promise<number> => {
-        let maxRowHeight = comparisonLineHeight // Use comparison specific line height
+        let maxRowHeight = comparisonLineHeight
 
-        // Determine if it's a text parameter based on the latest value
         let isTextParameter = false
         let latestParamInstance: Parameter | undefined
         if (relevantHistoricalEntries.length > 0) {
@@ -973,7 +1215,6 @@ const printedBy =
           }
         }
 
-        // Determine common unit and range (take from the latest entry for consistency)
         let commonUnit = ""
         let commonRange = ""
         if (!isTextParameter && relevantHistoricalEntries.length > 0) {
@@ -996,136 +1237,143 @@ const printedBy =
           }
         }
 
-        // Parameter Name column (with unit)
         const paramDisplayName = param.unit && !isTextParameter ? `${param.name} (${param.unit})` : param.name
         const nameLines = doc.splitTextToSize(" ".repeat(indent) + paramDisplayName, fixedColWidthParam - 4)
         doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0)
         doc.text(nameLines, left + 2, yPos + 4)
         maxRowHeight = Math.max(maxRowHeight, nameLines.length * comparisonLineHeight)
 
-        // Range column (only for non-text parameters)
         if (!isTextParameter) {
           const rangeLines = doc.splitTextToSize(commonRange, fixedColWidthRange - 4)
           doc.text(rangeLines, left + fixedColWidthParam + 2, yPos + 4)
           maxRowHeight = Math.max(maxRowHeight, rangeLines.length * comparisonLineHeight)
         }
 
-        // Dynamic date columns for values
         let currentXForValues = left + fixedColWidthParam + fixedColWidthRange
-
         if (isTextParameter) {
-          // For text parameters, only show the latest value and span it across remaining columns
-          const latestEntry = relevantHistoricalEntries[0] // First entry is the latest due to reverse sort
+          const latestEntry = relevantHistoricalEntries[0]
           const paramInstance =
             latestEntry?.parameters.find((p) => p.name === param.name) ||
             latestEntry?.parameters.flatMap((p) => p.subparameters || []).find((sp) => sp.name === param.name)
-
           let valueToDisplay = "-"
           if (paramInstance) {
             valueToDisplay = String(paramInstance.value).trim()
           }
-
           doc.setFont("helvetica", "normal").setTextColor(0, 0, 0)
-          // The text should span from the start of the 'Range' column to the end of the table.
-          const textSpanWidth = totalW - fixedColWidthParam // Total width minus parameter name column
-          const valueLines = doc.splitTextToSize(valueToDisplay, textSpanWidth - 4) // -4 for padding
-          doc.text(valueLines, left + fixedColWidthParam + 2, yPos + 4, { align: "left" }) // Start from where Range column begins
+          const textSpanWidth = totalW - fixedColWidthParam
+          const valueLines = doc.splitTextToSize(valueToDisplay, textSpanWidth - 4)
+          doc.text(valueLines, left + fixedColWidthParam + 2, yPos + 4, { align: "left" })
           maxRowHeight = Math.max(maxRowHeight, valueLines.length * comparisonLineHeight)
         } else {
-          // For numeric parameters, iterate through each date column
           relevantHistoricalEntries.forEach((entry, index) => {
             const paramInstance =
               entry.parameters.find((p) => p.name === param.name) ||
               entry.parameters.flatMap((p) => p.subparameters || []).find((sp) => sp.name === param.name)
-
             let valueToDisplay = "-"
             let isOutOfRange = false
-
             if (paramInstance) {
               const rawValue = String(paramInstance.value).trim()
               valueToDisplay = rawValue
               const numVal = Number.parseFloat(rawValue)
               const numRange = parseNumericRangeString(commonRange)
               if (numRange && !isNaN(numVal)) {
-                if (numVal < numRange.lower || numVal > numRange.upper) {
+                if (numVal < numRange.lower) {
+                  isOutOfRange = true
+                } else if (numVal > numRange.upper) {
                   isOutOfRange = true
                 }
               }
               doc.setFont("helvetica", isOutOfRange ? "bold" : "normal").setTextColor(0, 0, 0)
             }
-
             const valueLines = doc.splitTextToSize(valueToDisplay, dynamicColWidth - 4)
-            doc.text(valueLines, currentXForValues + dynamicColWidth / 2, yPos + 4, { align: "center" }) // Centered values
+            doc.text(valueLines, currentXForValues + dynamicColWidth / 2, yPos + 4, { align: "center" })
             maxRowHeight = Math.max(maxRowHeight, valueLines.length * comparisonLineHeight)
             currentXForValues += dynamicColWidth
           })
         }
-
-        return yPos + maxRowHeight + comparisonRowPadding // Add padding between rows
+        return yPos + maxRowHeight + comparisonRowPadding
       }
 
-      // Print global parameters first
       for (const param of globalParameters) {
-        yPos = await ensureSpace(yPos, comparisonLineHeight * 2) // Estimate space for a row
+        yPos = await ensureSpace(yPos, comparisonLineHeight * 2, data.createdAt)
         yPos = await printComparisonParameterRow(param)
       }
 
-      // Print subheaded parameters
       for (const sh of subheads) {
         const rows = currentTestBloodData.parameters.filter((p) => sh.parameterNames.includes(p.name))
         if (!rows.length) continue
 
-        yPos = await ensureSpace(yPos, 6 + comparisonLineHeight * 2) // Estimate for subheading + first row
+        yPos = await ensureSpace(yPos, 6 + comparisonLineHeight * 2, data.createdAt)
         doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(0, 51, 102)
         doc.text(sh.title, left, yPos + 5)
         yPos += 6
         for (const param of rows) {
-          yPos = await ensureSpace(yPos, comparisonLineHeight * 2) // Estimate space for a row
-          yPos = await printComparisonParameterRow(param, 2) // Indent subparameters
+          yPos = await ensureSpace(yPos, comparisonLineHeight * 2, data.createdAt)
+          yPos = await printComparisonParameterRow(param, 2)
         }
       }
-      yPos += 10 // Space after each comparison table
+      yPos += 10
     }
     return yPos
   }
 
-  await addCover()
-  if (!data.bloodtest) return doc.output("blob")
-
-  let currentY: number
-  let reportedOnForFirstPage: string | undefined
-
-  // Determine the reportedOn date for the first content page's header
-  if (reportType === "comparison") {
-    reportedOnForFirstPage = data.createdAt
-  } else if (reportType === "combined") {
-    const testsToPrint = Object.keys(data.bloodtest || {}).filter((key) => selectedTests.includes(key))
-    if (testsToPrint.length > 0) {
-      reportedOnForFirstPage = data.bloodtest![testsToPrint[0]]?.reportedOn
-    }
-  } else {
-    // Normal report
-    const combinedTestKeys = combinedGroups.flatMap((group) => group.tests)
-    const firstTestKey = Object.keys(data.bloodtest || {}).find(
-      (key) => selectedTests.includes(key) && (combinedTestKeys.includes(key) || !combinedTestKeys.includes(key)),
-    )
-    if (firstTestKey) {
-      reportedOnForFirstPage = data.bloodtest![firstTestKey]?.reportedOn
-    }
-  }
-
-  // Add a new page for content if a cover was present, or if we are starting directly with content
-  // If skipCover is true, content starts on the existing first page (no doc.addPage() here).
-  // If skipCover is false, a cover was added, so we add a new page for content.
+  // --- Main Page Flow ---
+  // 1. Cover Page (if not skipped)
   if (!skipCover) {
-    doc.addPage()
+    if (loadedFirstPage) {
+      doc.addImage(loadedFirstPage, "JPEG", 0, 0, w, h)
+    }
   }
 
-  if (includeLetterhead) {
-    await loadImageAsCompressedJPEG(letterhead.src, 0.5).then((img) => doc.addImage(img, "JPEG", 0, 0, w, h))
+  // 2. AI Suggestions Page (if requested)
+  if (includeAiSuggestionsPage && aiSuggestions) {
+    doc.addPage() // Add page for AI suggestions (this will be page 2 if cover exists, page 1 otherwise)
+    if (loadedLetterhead) {
+      doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
+    }
+    // Add header and stamps for the AI suggestions page
+    const aiPageY = headerY(data.createdAt)
+    await addStampsAndPrintedBy(doc, w, h, left, printedBy)
+
+    await renderAiSuggestionsPage(
+      doc,
+      data,
+      aiSuggestions,
+      w,
+      h,
+      left,
+      headerY, // Passed for reference, not called internally by renderAiSuggestionsPage
+      addStampsAndPrintedBy, // Passed for reference
+      ensureSpace,
+      printedBy, // Passed for reference
+      loadedDietImage!,
+      loadedExerciseImage!,
+    )
   }
-  currentY = headerY(reportedOnForFirstPage)
+
+  // 3. Main Report Content Pages
+  // Always add a new page for the actual report content.
+// 3. Main Report Content Pages
+let currentY = headerY(data.createdAt);
+let isFirstReportPage = doc.getNumberOfPages() === 1
+
+
+if (!isFirstReportPage) {
+  doc.addPage()
+  if (loadedLetterhead) {
+    doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
+  }
+  currentY = headerY(data.createdAt)
   await addStampsAndPrintedBy(doc, w, h, left, printedBy)
+} else {
+  if (loadedLetterhead) {
+    doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
+  }
+  currentY = headerY(data.createdAt)
+  await addStampsAndPrintedBy(doc, w, h, left, printedBy)
+}
+
+  if (!data.bloodtest) return doc.output("blob")
 
   if (reportType === "comparison") {
     currentY = await generateComparisonReportPDF(
@@ -1136,7 +1384,7 @@ const printedBy =
       currentY,
       w,
       left,
-      lineH, // Pass original lineH, comparison will use its own
+      lineH,
       ageDays,
       genderKey,
       h,
@@ -1146,77 +1394,59 @@ const printedBy =
     )
   } else if (reportType === "combined") {
     const testsToPrint = Object.keys(data.bloodtest || {}).filter((key) => selectedTests.includes(key))
-
-    // Chunk tests into groups of 5
     const testChunks: string[][] = []
     for (let i = 0; i < testsToPrint.length; i += 5) {
       testChunks.push(testsToPrint.slice(i, i + 5))
     }
-
-    let firstChunk = true // Flag to handle the first chunk on the already prepared page
+    let firstChunk = true
     for (const chunk of testChunks) {
       if (!firstChunk) {
-        // For subsequent chunks, add a new page
         currentY = await addNewPageWithHeader(data.bloodtest![chunk[0]]?.reportedOn)
       }
       firstChunk = false
-
       for (const testKey of chunk) {
         const tData = data.bloodtest![testKey]
         if (!tData || tData.type === "outsource" || !tData.parameters.length) continue
-
         currentY = await ensureSpace(currentY, 20, tData.reportedOn)
         currentY = await printTest(testKey, tData, currentY)
-        currentY += 10 // Space after each test within a combined page
+        currentY += 10
       }
     }
   } else {
-    // Normal report logic (individual tests and combined groups)
-    let firstGroupOrTest = true // Flag to handle the first group/test on the already prepared page
-
-    // Process combined groups first
+    let firstGroupOrTest = true
     for (const group of combinedGroups) {
       if (group.tests.length === 0) continue
-
       const testsInGroup = group.tests.filter((testKey) => selectedTests.includes(testKey) && data.bloodtest![testKey])
-
       if (testsInGroup.length === 0) continue
 
       if (!firstGroupOrTest) {
-        // For subsequent groups, add a new page
         currentY = await addNewPageWithHeader(data.bloodtest![testsInGroup[0]].reportedOn)
       }
       firstGroupOrTest = false
-
       for (const testKey of testsInGroup) {
         const tData = data.bloodtest![testKey]
         currentY = await printTest(testKey, tData, currentY)
       }
     }
 
-    // Process remaining individual tests
     const combinedTestKeys = combinedGroups.flatMap((group) => group.tests)
     const remainingTests = Object.keys(data.bloodtest || {}).filter(
       (key) => selectedTests.includes(key) && !combinedTestKeys.includes(key),
     )
-
     for (const testKey of remainingTests) {
       const tData = data.bloodtest![testKey]
       if (tData.type === "outsource" || !tData.parameters.length) continue
 
       if (!firstGroupOrTest) {
-        // For subsequent individual tests, add a new page
         currentY = await addNewPageWithHeader(tData.reportedOn)
       }
       firstGroupOrTest = false
-
       currentY = await printTest(testKey, tData, currentY)
     }
   }
 
-  // Final "END OF REPORT" text (stamps are now added per page)
   doc.setFont("helvetica", "italic").setFontSize(7).setTextColor(0)
-  currentY = await ensureSpace(currentY, 20) // Ensure space for end of report
+  currentY = await ensureSpace(currentY, 20, data.createdAt)
   doc.text("--------------------- END OF REPORT ---------------------", w / 2, currentY + 4, { align: "center" })
 
   return doc.output("blob")
