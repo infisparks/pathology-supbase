@@ -290,13 +290,15 @@ export default function Dashboard() {
       if (error) throw error
       alert(`Sample time updated for ${sampleModalRegistration.name}`)
       console.log("Dashboard: Sample time updated successfully.")
+      // Auto-refresh registrations after update
+      fetchRegistrations()
     } catch (e: any) {
       console.error("Dashboard: Error saving sample time:", e.message)
       alert("Error saving sample time.")
     } finally {
       setSampleModalRegistration(null)
     }
-  }, [sampleModalRegistration, sampleDateTime])
+  }, [sampleModalRegistration, sampleDateTime, fetchRegistrations])
 
   const handleDeleteRegistration = useCallback(
     async (r: Registration) => {

@@ -250,19 +250,16 @@ export function RegistrationList({
                               ) : null
                             ) : (
                               <>
-                                {!sampleCollected && (
-                                  <button
-                                    onClick={() => {
-                                      setSampleModalRegistration(r)
-                                      setSampleDateTime(formatLocalDateTime())
-                                    }}
-                                    className="inline-flex items-center px-3.5 py-2 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 shadow-sm"
-                                  >
-                                    <DocumentTextIcon className="h-4 w-4 mr-2" />
-                                    Collect Sample
-                                  </button>
-                                )}
-
+                                <button
+                                  onClick={() => {
+                                    setSampleModalRegistration(r)
+                                    setSampleDateTime(r.sampleCollectedAt ? new Date(r.sampleCollectedAt).toISOString().slice(0, 16) : formatLocalDateTime())
+                                  }}
+                                  className={`inline-flex items-center px-3.5 py-2 ${sampleCollected ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-600 hover:bg-orange-700'} text-white rounded-md text-sm font-medium shadow-sm`}
+                                >
+                                  <DocumentTextIcon className="h-4 w-4 mr-2" />
+                                  {sampleCollected ? 'Sample Collected On' : 'Collect Sample'}
+                                </button>
                                 {sampleCollected && (
                                   <Link
                                     href={`/download-report/${r.id}`}

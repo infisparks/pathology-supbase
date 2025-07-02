@@ -231,6 +231,7 @@ const BloodValuesForm: React.FC = () => {
               .select("parameter, sub_heading")
               .eq("test_name", bt.testName)
               .single()
+
             if (testDefError || !testDefData) {
               console.warn(`Test definition not found for ${bt.testName}:`, testDefError)
               return {
@@ -266,6 +267,7 @@ const BloodValuesForm: React.FC = () => {
                 .toLowerCase()
                 .replace(/\s+/g, "_")
                 .replace(/[.#$[\]]/g, "")
+
               const saved = storedBloodtestDetail?.[testKey]?.parameters?.find((q: any) => q.name === p.name)
 
               let subps
@@ -292,6 +294,7 @@ const BloodValuesForm: React.FC = () => {
                   } as SubParameterValue
                 })
               }
+
               return {
                 name: p.name,
                 unit: p.unit,
@@ -304,6 +307,7 @@ const BloodValuesForm: React.FC = () => {
                 ...(p.suggestions ? { suggestions: p.suggestions } : {}),
               } as TestParameterValue
             })
+
             return {
               testId: bt.testId,
               testName: bt.testName,
@@ -324,7 +328,6 @@ const BloodValuesForm: React.FC = () => {
   }, [registrationId, reset])
 
   /* ══════════════ “Sum to 100” warning logic ══════════════ */
-
   const testsWatch = watch("tests")
   useEffect(() => {
     const warn: Record<string, boolean> = {}
@@ -345,7 +348,6 @@ const BloodValuesForm: React.FC = () => {
   }, [testsWatch])
 
   /* ══════════════ Automatic Formula recalculation ══════════════ */
-
   const calcFormulaOnce = useCallback(
     (tIdx: number, pIdx: number) => {
       const data = watch("tests")[tIdx]
@@ -391,7 +393,6 @@ const BloodValuesForm: React.FC = () => {
   }, [testsWatch, calcFormulaOnce])
 
   /* ══════════════ Numeric Change: allow up to 3 decimal places or “<” / “>” prefixes ══════════════ */
-
   const numericChange = (v: string, t: number, p: number, sp?: number) => {
     if (v === "" || v === "-") {
       // allow empty or single minus
@@ -406,7 +407,6 @@ const BloodValuesForm: React.FC = () => {
   }
 
   /* ══════════════ Build suggestions for text inputs ══════════════ */
-
   const buildMatches = (param: TestParameterValue, q: string): string[] => {
     if (Array.isArray(param.suggestions) && param.suggestions.length > 0) {
       const pool = param.suggestions.map((s) => s.description)
@@ -446,7 +446,6 @@ const BloodValuesForm: React.FC = () => {
   }
 
   /* ══════════════ Handle “fill remaining” for subheadings that sum to 100 ══════════════ */
-
   const fillRemaining = (tIdx: number, sh: SubHeading, lastIdx: number) => {
     const test = watch("tests")[tIdx]
     const idxs = sh.parameterNames.map((n) => test.parameters.findIndex((p) => p.name === n)).filter((i) => i >= 0)
@@ -461,7 +460,6 @@ const BloodValuesForm: React.FC = () => {
   }
 
   /* ══════════════ Submit handler: write back to Supabase ══════════════ */
-
   const onSubmit: SubmitHandler<BloodValuesFormInputs> = async (data) => {
     try {
       const { data: userData, error: userError } = await supabase.auth.getUser()
@@ -475,7 +473,6 @@ const BloodValuesForm: React.FC = () => {
         .eq("id", data.registrationId)
         .single()
       if (fetchError) throw fetchError
-
       const existingBloodtestDetail = existingRegData?.bloodtest_detail || {}
 
       const bloodtestDetail: Record<string, any> = {}
@@ -485,6 +482,7 @@ const BloodValuesForm: React.FC = () => {
           .replace(/\s+/g, "_")
           .replace(/[.#$[\]]/g, "")
         const now = new Date().toISOString()
+
         const params = t.parameters
           .map((p) => {
             const subs = p.subparameters?.filter((sp) => sp.value !== "") ?? []
@@ -542,7 +540,6 @@ const BloodValuesForm: React.FC = () => {
   }
 
   /* ── Early returns for missing registrationId or loading ── */
-
   if (!registrationId)
     return (
       <CenterCard icon={User} title="Registration Not Found">
@@ -561,42 +558,42 @@ const BloodValuesForm: React.FC = () => {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-1">
         <Card className="w-full max-w-3xl relative shadow-lg">
-          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pb-2">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-              <Droplet className="h-6 w-6" />
+          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center gap-2 pb-0.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+              <Droplet className="h-4 w-4" />
             </div>
-            <div className="grid gap-1">
-              <CardTitle className="text-2xl font-bold text-gray-800">Blood Test Analysis</CardTitle>
-              <CardDescription className="text-gray-600">
+            <div className="grid gap-0">
+              <CardTitle className="text-lg font-bold text-gray-800">Blood Test Analysis</CardTitle>
+              <CardDescription className="text-gray-600 text-xs">
                 Comprehensive data entry for patient blood test results.
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-1">
             {patientDetails && (
-              <Card className="mb-6 bg-blue-50 border-blue-200 shadow-sm">
-                <CardContent className="p-3 flex items-center gap-4">
-                  <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-blue-200 text-blue-700 text-2xl font-semibold">
+              <Card className="mb-2 bg-blue-50 border-blue-200 shadow-sm">
+                <CardContent className="p-1.5 flex items-center gap-2">
+                  <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-200 text-blue-700 text-lg font-semibold">
                     {patientDetails.name ? (
                       patientDetails.name.charAt(0).toUpperCase()
                     ) : (
-                      <CircleUserRound className="h-8 w-8" />
+                      <CircleUserRound className="h-6 w-6" />
                     )}
                   </div>
-                  <div className="grid gap-1">
-                    <p className="text-lg font-semibold text-gray-800">{patientDetails.name}</p>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <div className="grid gap-0">
+                    <p className="text-base font-semibold text-gray-800">{patientDetails.name}</p>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
                       <span className="font-medium">Patient ID:</span> {patientDetails.patientId}
-                      <Separator orientation="vertical" className="h-4" />
+                      <Separator orientation="vertical" className="h-3" />
                       <span className="font-medium">Reg ID:</span> {registrationId}
                     </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                    <div className="flex items-center gap-1 mt-0">
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5">
                         Age: {patientDetails.age}
                       </Badge>
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5">
                         Gender: {patientDetails.gender}
                       </Badge>
                     </div>
@@ -604,47 +601,114 @@ const BloodValuesForm: React.FC = () => {
                 </CardContent>
               </Card>
             )}
-            <form onSubmit={handleSubmit(onSubmit)}>
-              {tests.map((test, tIdx) => {
-                if (test.testType?.toLowerCase() === "outsource") {
+            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col h-full">
+              <div className="flex-1 overflow-y-auto space-y-1.5 pb-1">
+                {tests.map((test, tIdx) => {
+                  if (test.testType?.toLowerCase() === "outsource") {
+                    return (
+                      <Card key={test.testId} className="mb-1.5 border-l-4 border-yellow-500 bg-yellow-50 shadow-sm">
+                        <CardContent className="p-2">
+                          <div className="flex items-center gap-1.5 text-yellow-800">
+                            <Droplet className="h-3.5 w-3.5" />
+                            <h3 className="font-semibold text-sm">{test.testName}</h3>
+                          </div>
+                          <p className="mt-0.5 text-xs text-yellow-800">
+                            This is an outsourced test. No data entry is required.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+                  const sh = test.subheadings || []
+                  const shNames = sh.flatMap((x) => x.parameterNames)
+                  const globals = test.parameters
+                    .map((p, i) => ({ ...p, originalIndex: i }))
+                    .filter((p) => !shNames.includes(p.name))
                   return (
-                    <Card key={test.testId} className="mb-3 border-l-4 border-yellow-500 bg-yellow-50 shadow-sm">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-2 text-yellow-800">
-                          <Droplet className="h-4 w-4" />
-                          <h3 className="font-semibold">{test.testName}</h3>
+                    <Card key={test.testId} className="mb-1.5 border-l-4 border-blue-500 bg-card shadow-sm">
+                      <CardHeader className="pb-0">
+                        <div className="flex items-center gap-1.5">
+                          <Droplet className="h-3.5 w-3.5 text-blue-600" />
+                          <CardTitle className="text-sm text-gray-800">{test.testName}</CardTitle>
                         </div>
-                        <p className="mt-2 text-sm text-yellow-800">
-                          This is an outsourced test. No data entry is required.
-                        </p>
-                      </CardContent>
-                    </Card>
-                  )
-                }
-                const sh = test.subheadings || []
-                const shNames = sh.flatMap((x) => x.parameterNames)
-                const globals = test.parameters
-                  .map((p, i) => ({ ...p, originalIndex: i }))
-                  .filter((p) => !shNames.includes(p.name))
-                return (
-                  <Card key={test.testId} className="mb-3 border-l-4 border-blue-500 bg-card shadow-sm">
-                    <CardHeader className="pb-1">
-                      <div className="flex items-center gap-2">
-                        <Droplet className="h-4 w-4 text-blue-600" />
-                        <CardTitle className="text-base text-gray-800">{test.testName}</CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-1">
-                      {sh.length > 0 && globals.length > 0 && (
-                        <>
-                          <h4 className="mb-2 text-sm font-semibold text-gray-700">Global Parameters</h4>
-                          <div className="grid gap-2">
-                            {globals.map((p) => (
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        {sh.length > 0 && globals.length > 0 && (
+                          <>
+                            <h4 className="mb-1 text-xs font-semibold text-gray-700">Global Parameters</h4>
+                            <div className="grid gap-1">
+                              {globals.map((p) => (
+                                <ParamRow
+                                  key={p.originalIndex}
+                                  tIdx={tIdx}
+                                  pIdx={p.originalIndex}
+                                  param={p}
+                                  tests={tests}
+                                  errors={errors}
+                                  numericChange={numericChange}
+                                  textChange={textChange}
+                                  pickSug={pickSug}
+                                  calcOne={calcFormulaOnce}
+                                  setSuggest={setSuggest}
+                                  setShowSug={setShowSug}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        )}
+                        {sh.length
+                          ? sh.map((s, shIdx) => {
+                              const tag = `${tIdx}-${shIdx}`
+                              const list = test.parameters
+                                .map((p, i) => ({ ...p, originalIndex: i }))
+                                .filter((p) => s.parameterNames.includes(p.name))
+                              const need100 = s.is100 === true || s.is100 === "true"
+                              const last = list[list.length - 1]
+                              return (
+                                <div key={shIdx} className="mt-2">
+                                  <h4
+                                    className={cn(
+                                      "mb-1 text-xs font-semibold text-gray-700",
+                                      warn100[tag] && "text-red-600",
+                                    )}
+                                  >
+                                    {s.title}
+                                    {need100 && (
+                                      <span className="ml-1 text-2xs font-normal text-gray-500">(must total 100%)</span>
+                                    )}
+                                  </h4>
+                                  <div className="grid gap-1">
+                                    {list.map((p) => {
+                                      const isLast = need100 && p.originalIndex === last.originalIndex
+                                      return (
+                                        <ParamRow
+                                          key={p.originalIndex}
+                                          tIdx={tIdx}
+                                          pIdx={p.originalIndex}
+                                          param={{ ...p, originalIndex: p.originalIndex }}
+                                          tests={tests}
+                                          errors={errors}
+                                          pickSug={pickSug}
+                                          numericChange={numericChange}
+                                          textChange={textChange}
+                                          calcOne={calcFormulaOnce}
+                                          isLastOf100={isLast}
+                                          fillRemaining={() => fillRemaining(tIdx, s, p.originalIndex)}
+                                          setSuggest={setSuggest}
+                                          setShowSug={setShowSug}
+                                        />
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })
+                          : test.parameters.map((p, pIdx) => (
                               <ParamRow
-                                key={p.originalIndex}
+                                key={pIdx}
                                 tIdx={tIdx}
-                                pIdx={p.originalIndex}
-                                param={p}
+                                pIdx={pIdx}
+                                param={{ ...p, originalIndex: pIdx }}
                                 tests={tests}
                                 errors={errors}
                                 numericChange={numericChange}
@@ -655,86 +719,21 @@ const BloodValuesForm: React.FC = () => {
                                 setShowSug={setShowSug}
                               />
                             ))}
-                          </div>
-                        </>
-                      )}
-                      {sh.length
-                        ? sh.map((s, shIdx) => {
-                            const tag = `${tIdx}-${shIdx}`
-                            const list = test.parameters
-                              .map((p, i) => ({ ...p, originalIndex: i }))
-                              .filter((p) => s.parameterNames.includes(p.name))
-                            const need100 = s.is100 === true || s.is100 === "true"
-                            const last = list[list.length - 1]
-                            return (
-                              <div key={shIdx} className="mt-4">
-                                <h4
-                                  className={cn(
-                                    "mb-2 text-sm font-semibold text-gray-700",
-                                    warn100[tag] && "text-red-600",
-                                  )}
-                                >
-                                  {s.title}
-                                  {need100 && (
-                                    <span className="ml-2 text-xs font-normal text-gray-500">(must total 100%)</span>
-                                  )}
-                                </h4>
-                                <div className="grid gap-2">
-                                  {list.map((p) => {
-                                    const isLast = need100 && p.originalIndex === last.originalIndex
-                                    return (
-                                      <ParamRow
-                                        key={p.originalIndex}
-                                        tIdx={tIdx}
-                                        pIdx={p.originalIndex}
-                                        param={{ ...p, originalIndex: p.originalIndex }}
-                                        tests={tests}
-                                        errors={errors}
-                                        pickSug={pickSug}
-                                        numericChange={numericChange}
-                                        textChange={textChange}
-                                        calcOne={calcFormulaOnce}
-                                        isLastOf100={isLast}
-                                        fillRemaining={() => fillRemaining(tIdx, s, p.originalIndex)}
-                                        setSuggest={setSuggest}
-                                        setShowSug={setShowSug}
-                                      />
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )
-                          })
-                        : test.parameters.map((p, pIdx) => (
-                            <ParamRow
-                              key={pIdx}
-                              tIdx={tIdx}
-                              pIdx={pIdx}
-                              param={{ ...p, originalIndex: pIdx }}
-                              tests={tests}
-                              errors={errors}
-                              numericChange={numericChange}
-                              textChange={textChange}
-                              calcOne={calcFormulaOnce}
-                              setSuggest={setSuggest}
-                              setShowSug={setShowSug}
-                              pickSug={pickSug}
-                            />
-                          ))}
-                    </CardContent>
-                  </Card>
-                )
-              })}
-              <div className="mt-6 border-t pt-4 flex gap-2">
-                <Button type="submit" disabled={isSubmitting} className="flex-1 py-2 text-lg">
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+              <div className="mt-2 border-t pt-2 flex gap-1.5">
+                <Button type="submit" disabled={isSubmitting} className="flex-1 py-1.5 text-base">
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                       Saving…
                     </>
                   ) : (
                     <>
-                      <CheckCircle className="mr-2 h-5 w-5" />
+                      <CheckCircle className="mr-1.5 h-4 w-4" />
                       Save Results
                     </>
                   )}
@@ -744,7 +743,7 @@ const BloodValuesForm: React.FC = () => {
           </CardContent>
           {showSug && suggest.length > 0 && (
             <Card
-              className="fixed z-50 max-h-40 overflow-auto p-1 shadow-lg"
+              className="fixed z-50 max-h-32 overflow-auto p-0.5 shadow-lg"
               style={{
                 top: showSug.y,
                 left: showSug.x,
@@ -756,7 +755,7 @@ const BloodValuesForm: React.FC = () => {
                 {suggest.map((s, i) => (
                   <div
                     key={i}
-                    className="cursor-pointer px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+                    className="cursor-pointer px-2 py-0.5 text-xs hover:bg-accent hover:text-accent-foreground"
                     onMouseDown={(e) => {
                       e.preventDefault()
                       pickSug(s, showSug.t, showSug.p)
@@ -853,11 +852,11 @@ const ParamRow: React.FC<RowProps> = ({
   }
 
   return (
-    <div className="flex items-center rounded-lg border bg-background px-3 py-1.5 text-sm shadow-sm">
-      <div className="flex flex-1 items-center gap-2">
-        <Label htmlFor={`param-${tIdx}-${pIdx}`} className="font-medium text-foreground">
+    <div className="flex items-center rounded-lg border bg-background px-1.5 py-0.5 text-xs shadow-sm">
+      <div className="flex flex-1 items-center gap-1">
+        <Label htmlFor={`param-${tIdx}-${pIdx}`} className="font-medium text-foreground text-xs">
           {param.name}
-          {param.unit && <span className="ml-1 text-xs text-muted-foreground">({param.unit})</span>}
+          {param.unit && <span className="ml-0.5 text-2xs text-muted-foreground">({param.unit})</span>}
         </Label>
         {param.formula && param.valueType === "number" && (
           <Tooltip>
@@ -867,10 +866,10 @@ const ParamRow: React.FC<RowProps> = ({
                 onClick={() => calcOne(tIdx, pIdx)}
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+                className="h-5 w-5 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
                 aria-label="Calculate formula"
               >
-                <Calculator className="h-3.5 w-3.5" />
+                <Calculator className="h-2.5 w-2.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
@@ -884,14 +883,14 @@ const ParamRow: React.FC<RowProps> = ({
             onClick={fillRemaining}
             variant="outline"
             size="sm"
-            className="ml-2 h-7 text-xs text-green-600 border-green-600 hover:bg-green-50 hover:text-green-800 bg-transparent"
+            className="ml-1 h-5 text-2xs text-green-600 border-green-600 hover:bg-green-50 hover:text-green-800 bg-transparent"
           >
             Calculate Rem.
           </Button>
         )}
       </div>
       {param.valueType === "number" ? (
-        <div className="relative ml-2 w-32">
+        <div className="relative ml-1.5 w-28">
           <Input
             id={`param-${tIdx}-${pIdx}`}
             type="text"
@@ -899,12 +898,12 @@ const ParamRow: React.FC<RowProps> = ({
             onChange={(e) => numericChange(e.target.value, tIdx, pIdx)}
             onKeyDown={handleKeyDown}
             placeholder={"Value or >10 / <10"}
-            className={cn("pr-8 h-9", isOutOfRange && "border-red-500 bg-red-50 focus-visible:ring-red-500")}
+            className={cn("pr-6 h-6 text-xs", isOutOfRange && "border-red-500 bg-red-50 focus-visible:ring-red-500")}
           />
           {isOutOfRange && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <AlertCircle className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-red-500" />
+                <AlertCircle className="absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-red-500" />
               </TooltipTrigger>
               <TooltipContent>
                 <p>Value is outside normal range: {currentParam.range}</p>
@@ -913,7 +912,7 @@ const ParamRow: React.FC<RowProps> = ({
           )}
         </div>
       ) : (
-        <div className="relative ml-2 w-36">
+        <div className="relative ml-1.5 w-32">
           <Input
             id={`param-${tIdx}-${pIdx}`}
             type="text"
@@ -922,11 +921,11 @@ const ParamRow: React.FC<RowProps> = ({
             onChange={handleChange}
             onBlur={handleBlur}
             placeholder={"Text"}
-            className="h-9"
+            className="h-6 text-xs"
           />
         </div>
       )}
-      <div className="ml-4 flex-1 text-right text-muted-foreground">
+      <div className="ml-1.5 flex-1 text-right text-muted-foreground text-2xs">
         Normal Range:{" "}
         <span className={cn("font-medium", isOutOfRange ? "text-red-600" : "text-green-600")}>
           {currentParam.range}
@@ -944,11 +943,11 @@ const CenterCard: React.FC<{
   spin?: boolean
   children: React.ReactNode
 }> = ({ icon: Icon, title, spin, children }) => (
-  <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+  <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-3">
     <Card className="w-full max-w-md text-center shadow-lg">
-      <CardContent className="p-8">
-        <Icon className={cn("mx-auto mb-4 h-12 w-12 text-primary", spin && "animate-spin")} />
-        {title && <CardTitle className="mb-2 text-xl text-gray-800">{title}</CardTitle>}
+      <CardContent className="p-5">
+        <Icon className={cn("mx-auto mb-2 h-9 w-9 text-primary", spin && "animate-spin")} />
+        {title && <CardTitle className="mb-1 text-lg text-gray-800">{title}</CardTitle>}
         {children}
       </CardContent>
     </Card>

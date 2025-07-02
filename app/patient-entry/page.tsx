@@ -1,21 +1,30 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+
 import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
+
 import { supabase } from "@/lib/supabase"
 
 import { Card, CardContent } from "@/components/ui/card"
+
 import { Input } from "@/components/ui/input"
+
 import { Button } from "@/components/ui/button"
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
 import { Label } from "@/components/ui/label"
+
 import { Textarea } from "@/components/ui/textarea"
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+
 import { UserCircle, Phone, Calendar, Clock, Plus, X, Search, Trash2 } from "lucide-react"
 
 /**
  * -----------------------------
- *  Helpers and constants
+ *   Helpers and constants
  * -----------------------------
  */
 
@@ -49,7 +58,7 @@ async function generatePatientId() {
 
 /**
  * -----------------------------
- *  Types
+ *   Types
  * -----------------------------
  */
 
@@ -123,7 +132,7 @@ interface PatientSuggestion {
 
 /**
  * -----------------------------
- *  Component
+ *   Component
  * -----------------------------
  */
 
@@ -189,7 +198,6 @@ export default function PatientEntryForm() {
     control,
     name: "bloodTests",
   })
-
   const {
     fields: paymentFields,
     append: appendPayment,
@@ -258,7 +266,6 @@ export default function PatientEntryForm() {
   const totalAmount = bloodTests.reduce((s, t) => s + (t.price || 0), 0)
   const totalPaid = paymentEntries.reduce((s, p) => s + (p.amount || 0), 0)
   const remainingAmount = totalAmount - discountAmount - totalPaid
-
   const unselectedTests = useMemo(
     () => bloodRows.filter((t) => !bloodTests.some((bt) => bt.testId === t.id)),
     [bloodRows, bloodTests],
@@ -321,10 +328,8 @@ export default function PatientEntryForm() {
       alert("Please add at least one blood test before submitting.")
       return
     }
-
     try {
       let patientDatabaseId: number
-
       if (data.existingPatientId) {
         // Use existing patient - no need to create new patient record
         patientDatabaseId = data.existingPatientId
@@ -334,7 +339,6 @@ export default function PatientEntryForm() {
         if (!data.patientId) data.patientId = await generatePatientId()
         const mult = data.dayType === "year" ? 360 : data.dayType === "month" ? 30 : 1
         const totalDay = data.age * mult
-
         const { data: patientRow, error: patientErr } = await supabase
           .from(TABLE.PATIENT)
           .insert({
@@ -351,24 +355,20 @@ export default function PatientEntryForm() {
           .select()
           .single()
         throwIfError(patientErr)
-
         patientDatabaseId = patientRow.id
         console.log("Created new patient with ID:", patientDatabaseId)
       }
 
       /* REGISTRATION ROW with new payment structure */
       const isoTime = time12ToISO(data.registrationDate, data.registrationTime)
-
       // Create the global payment structure - ONLY save to amount_paid_history
       const paymentHistoryData: PaymentHistory = {
         totalAmount: totalAmount,
         discount: discountAmount,
         paymentHistory: data.paymentEntries.length > 0 ? data.paymentEntries : [],
       }
-
       // Calculate total amount paid for legacy fields
       const totalAmountPaid = data.paymentEntries.reduce((sum, entry) => sum + entry.amount, 0)
-
       const { data: regData, error: regErr } = await supabase
         .from(TABLE.REGISTRATION)
         .insert({
@@ -387,9 +387,7 @@ export default function PatientEntryForm() {
         .select()
         .single() // Select the inserted row to get its ID
       throwIfError(regErr)
-
       const registrationId = regData.id // Get the ID of the newly created registration
-
       const patientContact = data.contact
       const patientName = data.name
       const registrationDate = data.registrationDate
@@ -398,7 +396,6 @@ export default function PatientEntryForm() {
       const totalAmountFormatted = totalAmount.toFixed(2)
       const totalPaidFormatted = totalPaid.toFixed(2)
       const remainingAmountFormatted = remainingAmount.toFixed(2)
-
       const bloodTestNames = data.bloodTests.map((test) => test.testName).join(", ") || "No blood tests booked."
 
       const whatsappMessage = `Dear *${patientName}*,\n\nYour appointment at *MEDFORD HOSPITAL* on *${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
@@ -417,7 +414,6 @@ export default function PatientEntryForm() {
           },
           body: JSON.stringify(whatsappPayload),
         })
-
         const whatsappResult = await whatsappResponse.json()
         if (whatsappResponse.ok) {
           console.log("WhatsApp message sent successfully:", whatsappResult)
@@ -435,7 +431,6 @@ export default function PatientEntryForm() {
       const message = data.existingPatientId
         ? "New registration added to existing patient successfully ✅"
         : "New patient and registration saved successfully ✅"
-
       alert(message)
       reset({ ...defaultValues() })
       setIsExistingPatient(false)
@@ -467,19 +462,18 @@ export default function PatientEntryForm() {
   })
 
   /** ------------------------------
-   *  JSX
+   *   JSX
    * ------------------------------ */
-
   return (
     <div className="flex h-screen bg-gray-50">
       <div className="flex-1 overflow-auto">
         <Card className="h-full rounded-none">
-          <CardContent className="p-6 h-full">
+          <CardContent className="p-3 h-full">
             <form onSubmit={handleSubmit(onSubmit)} className="h-full">
               {/* Header */}
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center">
-                  <UserCircle className="h-6 w-6 text-gray-600 mr-3" />
+                  <UserCircle className="h-6 w-6 text-gray-600 mr-2" />
                   <div>
                     <h2 className="text-2xl font-bold text-gray-800">Patient Entry</h2>
                     {isExistingPatient && (
@@ -487,7 +481,7 @@ export default function PatientEntryForm() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-3">
                   <div className="flex items-center text-sm">
                     <Calendar className="h-4 w-4 text-gray-500 mr-2" />
                     <input type="date" {...register("registrationDate")} className="p-2 border rounded text-sm w-40" />
@@ -505,9 +499,9 @@ export default function PatientEntryForm() {
               </div>
 
               {/* Patient Information */}
-              <div className="space-y-6">
-                <div className="bg-white p-4 rounded-lg border">
-                  <div className="flex items-center justify-between mb-4">
+              <div className="space-y-3">
+                <div className="bg-white p-3 rounded-lg border">
+                  <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-semibold text-gray-700">Patient Information</h3>
                     {isExistingPatient && (
                       <div className="flex items-center gap-2">
@@ -529,7 +523,7 @@ export default function PatientEntryForm() {
                       </div>
                     )}
                   </div>
-                  <div className="grid grid-cols-12 gap-4 mb-4">
+                  <div className="grid grid-cols-12 gap-2 mb-3">
                     {/* title */}
                     <div className="col-span-2">
                       <Label className="text-sm">Title</Label>
@@ -538,7 +532,7 @@ export default function PatientEntryForm() {
                         onValueChange={(v) => setValue("title", v)}
                         disabled={isExistingPatient}
                       >
-                        <SelectTrigger className="h-10">
+                        <SelectTrigger className="h-8">
                           <SelectValue placeholder="Select" />
                         </SelectTrigger>
                         <SelectContent>
@@ -550,7 +544,6 @@ export default function PatientEntryForm() {
                         </SelectContent>
                       </Select>
                     </div>
-
                     {/* name + autocomplete */}
                     <div className="col-span-6 relative">
                       <Label className="text-sm">Full Name</Label>
@@ -566,12 +559,12 @@ export default function PatientEntryForm() {
                               }
                             },
                           })}
-                          className={`h-10 pl-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
+                          className={`h-8 pl-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
                           placeholder="Type at least 2 letters..."
                           onFocus={() => !isExistingPatient && setShowPatientHints(true)}
                           disabled={isExistingPatient}
                         />
-                        <UserCircle className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
+                        <UserCircle className="h-4 w-4 absolute left-3 top-2.5 text-gray-400" />
                       </div>
                       {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
                       {showPatientHints && patientHints.length > 0 && !isExistingPatient && (
@@ -592,7 +585,6 @@ export default function PatientEntryForm() {
                         </ul>
                       )}
                     </div>
-
                     {/* phone */}
                     <div className="col-span-4">
                       <Label className="text-sm">Contact Number</Label>
@@ -602,18 +594,17 @@ export default function PatientEntryForm() {
                             required: "Phone number is required",
                             pattern: { value: /^[0-9]{10}$/, message: "Phone number must be 10 digits" },
                           })}
-                          className={`h-10 pl-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
+                          className={`h-8 pl-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
                           placeholder="Enter 10-digit mobile number"
                           disabled={isExistingPatient}
                         />
-                        <Phone className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
+                        <Phone className="h-4 w-4 absolute left-3 top-2.5 text-gray-400" />
                       </div>
                       {errors.contact && <p className="text-red-500 text-xs mt-1">{errors.contact.message}</p>}
                     </div>
                   </div>
-
                   {/* age row */}
-                  <div className="grid grid-cols-12 gap-4">
+                  <div className="grid grid-cols-12 gap-2">
                     <div className="col-span-2">
                       <Label className="text-sm">Age</Label>
                       <Input
@@ -622,12 +613,11 @@ export default function PatientEntryForm() {
                           required: "Age is required",
                           min: { value: 1, message: "Age must be positive" },
                         })}
-                        className={`h-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
+                        className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
                         disabled={isExistingPatient}
                       />
                       {errors.age && <p className="text-red-500 text-xs mt-1">{errors.age.message}</p>}
                     </div>
-
                     <div className="col-span-2">
                       <Label className="text-sm">Age Unit</Label>
                       <Select
@@ -635,7 +625,7 @@ export default function PatientEntryForm() {
                         onValueChange={(v) => setValue("dayType", v as any)}
                         disabled={isExistingPatient}
                       >
-                        <SelectTrigger className={`h-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
+                        <SelectTrigger className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -645,7 +635,6 @@ export default function PatientEntryForm() {
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="col-span-3">
                       <Label className="text-sm">Gender</Label>
                       <Select
@@ -653,7 +642,7 @@ export default function PatientEntryForm() {
                         onValueChange={(v) => setValue("gender", v)}
                         disabled={isExistingPatient}
                       >
-                        <SelectTrigger className={`h-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
+                        <SelectTrigger className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
                           <SelectValue placeholder="Select gender" />
                         </SelectTrigger>
                         <SelectContent>
@@ -663,11 +652,10 @@ export default function PatientEntryForm() {
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="col-span-3">
                       <Label className="text-sm">Hospital</Label>
                       <Select value={watch("hospitalName")} onValueChange={(v) => setValue("hospitalName", v)}>
-                        <SelectTrigger className="h-10">
+                        <SelectTrigger className="h-8">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -677,11 +665,10 @@ export default function PatientEntryForm() {
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div className="col-span-2">
                       <Label className="text-sm">Visit Type</Label>
                       <Select value={watch("visitType")} onValueChange={(v) => setValue("visitType", v as any)}>
-                        <SelectTrigger className="h-10">
+                        <SelectTrigger className="h-8">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -693,15 +680,15 @@ export default function PatientEntryForm() {
                   </div>
                 </div>
 
-                {/* address / doctor */}
-                <div className="bg-white p-4 rounded-lg border">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-4">Address & Doctor</h3>
-                  <div className="grid grid-cols-2 gap-6">
+                {/* Address & Doctor */}
+                <div className="bg-white p-3 rounded-lg border">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">Address & Doctor</h3>
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label className="text-sm">Address</Label>
                       <Textarea
                         {...register("address")}
-                        className={`min-h-[80px] resize-none ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
+                        className={`min-h-[50px] resize-none ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
                         placeholder="123 Main St, City"
                         disabled={isExistingPatient}
                       />
@@ -713,7 +700,7 @@ export default function PatientEntryForm() {
                           required: "Referring doctor is required",
                           onChange: () => setShowDoctorHints(true),
                         })}
-                        className="h-10"
+                        className="h-8"
                       />
                       {errors.doctorName && <p className="text-red-500 text-xs mt-1">{errors.doctorName.message}</p>}
                       {showDoctorHints && doctorList.length > 0 && (
@@ -740,10 +727,10 @@ export default function PatientEntryForm() {
                 </div>
 
                 {/* Blood tests */}
-                <div className="bg-white p-4 rounded-lg border">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="bg-white p-1 rounded-lg border">
+                  <div className="flex items-center justify-between mb-1">
                     <h3 className="text-lg font-semibold text-gray-700">Blood Tests</h3>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
                       <Button type="button" variant="outline" size="sm" onClick={addAllTests}>
                         Add All
                       </Button>
@@ -754,21 +741,21 @@ export default function PatientEntryForm() {
                         <Input
                           type="text"
                           placeholder="Search tests..."
-                          className="h-9 w-48"
+                          className="h-7 w-40"
                           value={searchText}
                           onChange={(e) => {
                             setSearchText(e.target.value)
                           }}
                         />
-                        <Search className="h-4 w-4 absolute right-3 top-2.5 text-gray-400" />
+                        <Search className="h-4 w-4 absolute right-3 top-2 text-gray-400" />
                         {searchText.trim() && (
-                          <ul className="absolute z-10 w-full bg-white border border-gray-300 mt-1 rounded-md max-h-40 overflow-y-auto text-sm shadow-lg">
+                          <ul className="absolute z-10 w-full bg-white border border-gray-300 mt-1 rounded-md max-h-32 overflow-y-auto text-sm shadow-lg">
                             {unselectedTests
                               .filter((t) => t.test_name.toLowerCase().includes(searchText.toLowerCase()))
                               .map((t) => (
                                 <li
                                   key={t.id}
-                                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                  className="px-2 py-1 hover:bg-gray-100 cursor-pointer"
                                   onClick={() => addTestById(t.id)}
                                 >
                                   {t.test_name} - ₹{t.price}
@@ -787,43 +774,42 @@ export default function PatientEntryForm() {
                       </Button>
                     </div>
                   </div>
-
                   {/* table */}
                   <div className="border rounded-md overflow-hidden">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[50%]">Test Name</TableHead>
-                          <TableHead className="w-[20%]">Price (₹)</TableHead>
-                          <TableHead className="w-[20%]">Type</TableHead>
-                          <TableHead className="w-[10%]" />
+                          <TableHead className="w-[50%] py-1 px-2">Test Name</TableHead>
+                          <TableHead className="w-[20%] py-1 px-2">Price (₹)</TableHead>
+                          <TableHead className="w-[20%] py-1 px-2">Type</TableHead>
+                          <TableHead className="w-[10%] py-1 px-2" />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {bloodTestFields.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={4} className="text-center py-8 text-gray-500">
+                            <TableCell colSpan={4} className="text-center py-2 text-gray-500">
                               No tests selected
                             </TableCell>
                           </TableRow>
                         ) : (
                           bloodTestFields.map((field, idx) => (
                             <TableRow key={field.id}>
-                              <TableCell>{watch(`bloodTests.${idx}.testName` as const)}</TableCell>
-                              <TableCell>
+                              <TableCell className="py-1 px-2">{watch(`bloodTests.${idx}.testName` as const)}</TableCell>
+                              <TableCell className="py-1 px-2">
                                 <Input
                                   type="number"
                                   {...register(`bloodTests.${idx}.price` as const, { valueAsNumber: true })}
-                                  className="h-8 w-24"
+                                  className="h-7 w-20"
                                   disabled
                                 />
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-1 px-2">
                                 <Select
                                   value={watch(`bloodTests.${idx}.testType` as const)}
                                   onValueChange={(v) => setValue(`bloodTests.${idx}.testType` as const, v as any)}
                                 >
-                                  <SelectTrigger className="h-8">
+                                  <SelectTrigger className="h-7">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -832,12 +818,12 @@ export default function PatientEntryForm() {
                                   </SelectContent>
                                 </Select>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-1 px-2">
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-8 w-8 p-0"
+                                  className="h-7 w-7 p-0"
                                   onClick={() => removeBloodTest(idx)}
                                 >
                                   <X className="h-4 w-4 text-red-500" />
@@ -852,34 +838,32 @@ export default function PatientEntryForm() {
                 </div>
 
                 {/* Payment Details */}
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="bg-white p-4 rounded-lg border">
-                    <div className="flex items-center justify-between mb-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white p-3 rounded-lg border">
+                    <div className="flex items-center justify-between mb-3">
                       <h3 className="text-lg font-semibold text-gray-700">Payment Details</h3>
                       <Button type="button" variant="outline" size="sm" onClick={addPaymentEntry}>
                         <Plus className="h-4 w-4 mr-1" /> Add Payment
                       </Button>
                     </div>
-
                     {/* Discount */}
-                    <div className="mb-4">
+                    <div className="mb-3">
                       <Label className="text-sm">Discount (₹)</Label>
                       <Input
                         type="number"
                         step="0.01"
                         {...register("discountAmount", { valueAsNumber: true })}
                         placeholder="0"
-                        className="h-10"
+                        className="h-8"
                       />
                     </div>
-
                     {/* Payment Entries */}
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {paymentFields.length === 0 ? (
                         <div className="text-center py-4 text-gray-500 text-sm">No payments added yet</div>
                       ) : (
                         paymentFields.map((field, idx) => (
-                          <div key={field.id} className="border rounded-lg p-3 bg-gray-50">
+                          <div key={field.id} className="border rounded-lg p-2 bg-gray-50">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-sm font-medium">Payment {idx + 1}</span>
                               <Button
@@ -926,10 +910,9 @@ export default function PatientEntryForm() {
                       )}
                     </div>
                   </div>
-
-                  <div className="bg-white p-4 rounded-lg border">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-4">Payment Summary</h3>
-                    <div className="space-y-3 mb-6">
+                  <div className="bg-white p-3 rounded-lg border">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-3">Payment Summary</h3>
+                    <div className="space-y-2 mb-3">
                       <div className="flex justify-between">
                         <span>Total Amount:</span>
                         <span className="font-medium">₹{totalAmount.toFixed(2)}</span>
