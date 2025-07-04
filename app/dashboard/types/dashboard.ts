@@ -3,6 +3,7 @@ export interface BloodTest {
   testId: string
   testName: string
   price: number
+  tpa_price?: number // Added for TPA pricing
   testType?: string
 }
 
@@ -10,6 +11,7 @@ export interface PaymentEntry {
   amount: number
   paymentMode: string
   time: string
+  amountId?: string // optional field for payment reference or transaction id
 }
 
 export interface PaymentHistory {
@@ -48,6 +50,7 @@ export interface Registration {
   deletedAt?: string
   deleteRequestApproved?: boolean
   deleteRequestApprovedAt?: string
+  tpa?: boolean
 }
 
 

@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { UserCircle, Phone, Calendar, Clock, Plus, X, Search, Trash2, ArrowLeft } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 
 /**
  * -----------------------------
@@ -104,6 +105,7 @@ interface IFormInput {
   patientId?: string
   registrationDate: string
   registrationTime: string
+  tpa: boolean // true = TPA, false = Normal
 }
 
 interface PatientSuggestion {
@@ -165,6 +167,7 @@ export default function EditPatientPage() {
       registrationTime: defaultTime,
       discountAmount: 0,
       paymentEntries: [],
+      tpa: false, // Default to Normal
     },
   })
 
@@ -269,6 +272,7 @@ export default function EditPatientPage() {
           registrationTime: registrationData.registration_time
             ? isoToTime12(registrationData.registration_time)
             : defaultTime,
+          tpa: registrationData.tpa ?? false,
           doctorId: null
         }
 
@@ -448,6 +452,7 @@ export default function EditPatientPage() {
           bloodtest_data: data.bloodTests,
           amount_paid_history: paymentHistoryData,
           doctor_name: data.doctorName,
+          tpa: data.tpa,
         })
         .eq("id", registrationId)
 
@@ -727,8 +732,8 @@ export default function EditPatientPage() {
                 {/* address / doctor */}
                 <div className="bg-white p-4 rounded-lg border">
                   <h3 className="text-lg font-semibold text-gray-700 mb-4">Address & Doctor</h3>
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
+                  <div className="grid grid-cols-12 gap-4 items-end">
+                    <div className="col-span-5">
                       <Label className="text-sm">Address</Label>
                       <Textarea
                         {...register("address")}
@@ -736,7 +741,7 @@ export default function EditPatientPage() {
                         placeholder="123 Main St, City"
                       />
                     </div>
-                    <div className="relative">
+                    <div className="col-span-5 relative">
                       <Label className="text-sm">Doctor Name</Label>
                       <Input
                         {...register("doctorName", {
@@ -763,6 +768,27 @@ export default function EditPatientPage() {
                             ))}
                         </ul>
                       )}
+                    </div>
+                    <div className="col-span-2 flex flex-col justify-end pb-1">
+                      <Label className="text-sm mb-1">Type</Label>
+                      <div className="flex gap-4">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={!watch("tpa")}
+                            onCheckedChange={v => setValue("tpa", !v)}
+                            id="normal-checkbox"
+                          />
+                          <Label htmlFor="normal-checkbox" className="text-sm cursor-pointer">Normal</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={watch("tpa")}
+                            onCheckedChange={v => setValue("tpa", !!v)}
+                            id="tpa-checkbox"
+                          />
+                          <Label htmlFor="tpa-checkbox" className="text-sm cursor-pointer">TPA</Label>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

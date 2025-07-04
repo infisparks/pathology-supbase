@@ -22,6 +22,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import { UserCircle, Phone, Calendar, Clock, Plus, X, Search, Trash2 } from "lucide-react"
 
+import { Checkbox } from "@/components/ui/checkbox"
+
 /**
  * -----------------------------
  *   Helpers and constants
@@ -109,6 +111,7 @@ interface IFormInput {
   registrationTime: string
   // New field to track if this is an existing patient
   existingPatientId?: number
+  tpa: boolean // true = TPA, false = Normal
 }
 
 interface PackageType {
@@ -175,6 +178,7 @@ export default function PatientEntryForm() {
       discountAmount: 0,
       paymentEntries: [],
       existingPatientId: undefined,
+      tpa: false, // Default to Normal
     },
   })
 
@@ -383,6 +387,7 @@ export default function PatientEntryForm() {
           bloodtest_data: data.bloodTests,
           amount_paid_history: paymentHistoryData,
           doctor_name: data.doctorName, // ONLY save to this column
+          tpa: data.tpa,
         })
         .select()
         .single() // Select the inserted row to get its ID
@@ -459,6 +464,7 @@ export default function PatientEntryForm() {
     discountAmount: 0,
     paymentEntries: [],
     existingPatientId: undefined,
+    tpa: false, // Default to Normal
   })
 
   /** ------------------------------
@@ -683,8 +689,8 @@ export default function PatientEntryForm() {
                 {/* Address & Doctor */}
                 <div className="bg-white p-3 rounded-lg border">
                   <h3 className="text-lg font-semibold text-gray-700 mb-3">Address & Doctor</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
+                  <div className="grid grid-cols-12 gap-3 items-end">
+                    <div className="col-span-5">
                       <Label className="text-sm">Address</Label>
                       <Textarea
                         {...register("address")}
@@ -693,7 +699,7 @@ export default function PatientEntryForm() {
                         disabled={isExistingPatient}
                       />
                     </div>
-                    <div className="relative">
+                    <div className="col-span-5 relative">
                       <Label className="text-sm">Doctor Name</Label>
                       <Input
                         {...register("doctorName", {
@@ -722,6 +728,27 @@ export default function PatientEntryForm() {
                             ))}
                         </ul>
                       )}
+                    </div>
+                    <div className="col-span-2 flex flex-col justify-end pb-1">
+                      <Label className="text-sm mb-1">Type</Label>
+                      <div className="flex gap-4">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={!watch("tpa")}
+                            onCheckedChange={v => setValue("tpa", !v)}
+                            id="normal-checkbox"
+                          />
+                          <Label htmlFor="normal-checkbox" className="text-sm cursor-pointer">Normal</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={watch("tpa")}
+                            onCheckedChange={v => setValue("tpa", !!v)}
+                            id="tpa-checkbox"
+                          />
+                          <Label htmlFor="tpa-checkbox" className="text-sm cursor-pointer">TPA</Label>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

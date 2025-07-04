@@ -47,11 +47,6 @@ export interface Parameter {
   }[]
 }
 
-// export interface Description { // Removed
-//   heading: string
-//   content: string
-// }
-
 export interface Subheading {
   title: string
   parameterNames: { name: string }[] // Changed from string[] to { name: string }[]
@@ -60,7 +55,7 @@ export interface Subheading {
 export interface BloodTestFormInputs {
   testName: string
   price: number
-  // descriptions?: Description[] // Removed as per provided Supabase schema
+  tpa_price?: number // Optional TPA price
   parameters: Parameter[]
   subheadings: Subheading[]
   isOutsource?: boolean
@@ -71,12 +66,11 @@ export interface TestData {
   id: number // Supabase primary key
   testName: string // Maps to test_name
   price: number
+  tpa_price?: number // Optional TPA price
   isOutsource: boolean // Maps to outsource
   parameters: Parameter[] // Maps to parameter (json)
   subheadings: Subheading[] // Maps to sub_heading (json)
-  // descriptions?: Description[] // Removed as per provided Supabase schema
   created_at: string // Supabase column name
-  // updated_at?: string // Removed as per provided Supabase schema
 }
 
 // Helper to safely fetch error messages
@@ -450,42 +444,6 @@ const SubheadingEditor: React.FC<SubheadingEditorProps> = ({
 }
 
 // ------------------------------------------------------------------
-// DESCRIPTION EDITOR (Removed as per provided Supabase schema)
-// ------------------------------------------------------------------
-// interface DescriptionEditorProps {
-//   index: number
-//   control: Control<BloodTestFormInputs>
-//   register: UseFormRegister<BloodTestFormInputs>
-//   errors: FieldErrorsImpl<BloodTestFormInputs>
-//   remove: (index: number) => void
-// }
-
-// const DescriptionEditor: React.FC<DescriptionEditorProps> = ({ index, control, register, errors, remove }) => {
-//   const headingErr = getFieldErrorMessage(errors, ["descriptions", index.toString(), "heading"])
-//   const contentErr = getFieldErrorMessage(errors, ["descriptions", index.toString(), "content"])
-
-//   return (
-//     <div className="flex space-x-2 mt-2">
-//       <input
-//         {...register(`descriptions.${index}.heading`, { required: "Required" })}
-//         placeholder="Heading"
-//         className="w-1/3 border rounded px-2 py-1"
-//       />
-//       <textarea
-//         {...register(`descriptions.${index}.content`, { required: "Required" })}
-//         placeholder="Content"
-//         className="w-2/3 border rounded px-2 py-1"
-//       />
-//       <button type="button" onClick={() => remove(index)} className="text-red-500 hover:text-red-700">
-//         <FaTrash />
-//       </button>
-//       {headingErr && <p className="text-red-500 text-xs w-full">{headingErr}</p>}
-//       {contentErr && <p className="text-red-500 text-xs w-full">{contentErr}</p>}
-//     </div>
-//   )
-// }
-
-// ------------------------------------------------------------------
 // TEST MODAL (Create & Edit)
 // ------------------------------------------------------------------
 interface TestModalProps {
@@ -501,7 +459,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
         ? {
             testName: testData.testName,
             price: testData.price,
-            // descriptions: testData.descriptions || [], // Removed as per provided Supabase schema
+            tpa_price: testData.tpa_price ?? undefined,
             parameters: testData.parameters,
             subheadings: testData.subheadings,
             isOutsource: testData.isOutsource || false,
@@ -509,7 +467,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
         : {
             testName: "",
             price: 0,
-            // descriptions: [], // Removed as per provided Supabase schema
+            tpa_price: undefined,
             parameters: [
               {
                 name: "",
@@ -542,7 +500,6 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
 
   const paramFields = useFieldArray({ control, name: "parameters" })
   const subheadingFields = useFieldArray({ control, name: "subheadings" })
-  // const descFields = useFieldArray({ control, name: "descriptions" }) // Removed
 
   useEffect(() => {
     console.log("TestModal: paramFields.fields.length changed:", paramFields.fields.length)
@@ -554,6 +511,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
 
   const testNameErr = getFieldErrorMessage(errors, ["testName"])
   const testPriceErr = getFieldErrorMessage(errors, ["price"])
+  const testTPAPriceErr = getFieldErrorMessage(errors, ["tpa_price"])
 
   // JSON editor toggle
   const [isJsonEditor, setIsJsonEditor] = useState(false)
@@ -567,7 +525,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
   const onSubmit: SubmitHandler<BloodTestFormInputs> = async (data) => {
     console.log("TestModal: onSubmit triggered with data:", data)
     try {
-      const payload = {
+      const payload: any = {
         test_name: data.testName,
         price: data.price,
         outsource: data.isOutsource,
@@ -577,7 +535,9 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
           title: sh.title,
           parameterNames: sh.parameterNames.map((p) => p.name),
         })),
-        // descriptions: data.descriptions, // Removed
+      }
+      if (data.tpa_price !== undefined && data.tpa_price !== null) { // FIX APPLIED HERE
+        payload.tpa_price = data.tpa_price
       }
       console.log("TestModal: Payload for Supabase:", payload)
 
@@ -635,13 +595,15 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
         parameterNames: sh.parameterNames.map((p: any) => p.name),
       }))
 
-      const payload = {
+      const payload: any = {
         test_name: parsed.testName,
         price: parsed.price,
         outsource: parsed.isOutsource,
         parameter: parsed.parameters,
         sub_heading: transformedSubheadings,
-        // descriptions: parsed.descriptions, // Removed
+      }
+      if (parsed.tpa_price !== undefined && parsed.tpa_price !== null) { // FIX APPLIED HERE
+        payload.tpa_price = parsed.tpa_price
       }
       console.log("TestModal: Payload for Supabase from JSON:", payload)
 
@@ -786,6 +748,20 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
                 className="w-full border rounded px-3 py-2"
               />
               {testPriceErr && <p className="text-red-500 text-xs">{testPriceErr}</p>}
+            </div>
+            {/* TPA Price (optional) */}
+            <div>
+              <label className="block text-sm font-medium">
+                TPA Price (Optional)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                {...register("tpa_price", { valueAsNumber: true })}
+                className="w-full border rounded px-3 py-2"
+                placeholder="Enter TPA price if any"
+              />
+              {testTPAPriceErr && <p className="text-red-500 text-xs">{testTPAPriceErr}</p>}
             </div>
             {/* Outsource */}
             <div>
@@ -941,7 +917,7 @@ export default function BloodTestsPage() {
     try {
       const { data, error } = await supabase
         .from("blood_test")
-        .select("id, test_name, price, outsource, parameter, sub_heading, created_at") // Columns based on your schema
+        .select("id, test_name, price, tpa_price, outsource, parameter, sub_heading, created_at") // Columns based on your schema
         .order("test_name")
 
       if (error) {
@@ -956,6 +932,7 @@ export default function BloodTestsPage() {
         id: item.id,
         testName: item.test_name,
         price: item.price,
+        tpa_price: item.tpa_price ?? undefined,
         isOutsource: item.outsource,
         parameters: item.parameter || [], // Ensure it's an array, default to empty
         subheadings: (item.sub_heading || []).map((sh: any) => ({
@@ -1050,6 +1027,7 @@ export default function BloodTestsPage() {
                     <TableRow>
                       <TableHead>Test Name</TableHead>
                       <TableHead>Price (₹)</TableHead>
+                      <TableHead>TPA Price (₹)</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Parameters</TableHead>
                       <TableHead>Subheadings</TableHead>
@@ -1071,6 +1049,13 @@ export default function BloodTestsPage() {
                           <TableCell className="font-medium">{test.testName}</TableCell>
                           <TableCell>
                             <span className="font-medium">₹{test.price}</span>
+                          </TableCell>
+                          <TableCell>
+                            {typeof test.tpa_price === "number" ? (
+                              <span className="font-medium">₹{test.tpa_price}</span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Badge variant={test.isOutsource ? "destructive" : "default"}>

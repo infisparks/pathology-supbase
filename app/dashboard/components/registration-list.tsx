@@ -17,6 +17,7 @@ import {
 import { isTestFullyEntered, isAllTestsComplete, calculateAmounts, formatCurrency } from "../lib/dashboard-utils"
 import type { Registration, PaymentHistory } from "../types/dashboard"
 import { useUserRole } from "@/hooks/useUserRole"
+import { Badge } from "@/components/ui/badge"
 
 interface RegistrationListProps {
   filteredRegistrations: Registration[]
@@ -146,6 +147,9 @@ export function RegistrationList({
                             <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-gray-100 text-gray-600 border border-gray-200">
                               {r.hospitalName}
                             </span>
+                          )}
+                          {r.tpa && (
+                            <Badge variant="secondary" className="ml-1 bg-blue-100 text-blue-800 border-blue-200">TPA</Badge>
                           )}
                         </div>
                         <div className="mt-1 text-sm text-gray-600">
@@ -309,7 +313,17 @@ export function RegistrationList({
                                 )}
 
                                 <button
-                                  onClick={() => setFakeBillRegistration(r)}
+                                  onClick={() => {
+                                    const tpa = r.tpa === true;
+                                    setFakeBillRegistration({
+                                      ...r,
+                                      bloodTests: (r.bloodTests || []).map((t: any) => ({
+                                        ...t,
+                                        price: tpa && typeof t.tpa_price === 'number' ? t.tpa_price : t.price,
+                                      })),
+                                      tpa,
+                                    });
+                                  }}
                                   className="inline-flex items-center px-3.5 py-2 bg-pink-600 text-white rounded-md text-sm font-medium hover:bg-pink-700 shadow-sm"
                                 >
                                   <DocumentTextIcon className="h-4 w-4 mr-2" />

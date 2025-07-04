@@ -179,6 +179,7 @@ export default function Dashboard() {
         .select(
           `
         *,
+        tpa,
         patientdetial (
           id, name, patient_id, age, gender, number, address, day_type, total_day, title
         )
@@ -207,7 +208,6 @@ export default function Dashboard() {
           sampleCollectedAt: registrationRow.samplecollected_time,
           paymentHistory: registrationRow.amount_paid_history || null,
           hospitalName: registrationRow.hospital_name,
-
           patient_id: registrationRow.patient_id,
           name: patientDetail.name || "Unknown",
           patientId: patientDetail.patient_id || "",
@@ -218,6 +218,7 @@ export default function Dashboard() {
           day_type: patientDetail.day_type,
           total_day: patientDetail.total_day,
           title: patientDetail.title,
+          tpa: registrationRow.tpa === true,
         }
       })
 
@@ -437,6 +438,7 @@ export default function Dashboard() {
                   amount: additionalPayment,
                   paymentMode: paymentMode,
                   time: new Date().toISOString(),
+                  ...(amountId ? { amountId } : {}),
                 },
               ]
             : currentPaymentHistory.paymentHistory,
@@ -471,8 +473,22 @@ export default function Dashboard() {
       console.error("Dashboard: Error updating payment and discount:", error.message)
       alert("Error updating payment and discount. Please try again.")
     }
-  }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode])
+  }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode, amountId])
   // ---------- END FIXED PART ----------
+
+  // When passing to FakeBill, ensure TPA price is used if tpa is true
+  const getFakeBillPatient = (reg: Registration | null) => {
+    if (!reg) return null
+    const tpa = reg.tpa === true
+    return {
+      ...reg,
+      bloodTests: (reg.bloodTests || []).map((t: any) => ({
+        ...t,
+        price: tpa && typeof t.tpa_price === 'number' ? t.tpa_price : t.price,
+      })),
+      tpa,
+    }
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -537,7 +553,7 @@ export default function Dashboard() {
         sampleDateTime={sampleDateTime}
         setSampleDateTime={setSampleDateTime}
         handleSaveSampleDate={handleSaveSampleDate}
-        fakeBillRegistration={fakeBillRegistration}
+        fakeBillRegistration={getFakeBillPatient(fakeBillRegistration)}
         setFakeBillRegistration={setFakeBillRegistration}
         formatLocalDateTime={formatLocalDateTime}
         deleteRequestModalRegistration={null}

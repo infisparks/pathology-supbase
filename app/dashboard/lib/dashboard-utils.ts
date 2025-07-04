@@ -22,7 +22,13 @@ export const isAllTestsComplete = (r: Registration) =>
   !r.bloodTests?.length || r.bloodTests.every((bt: BloodTest) => isTestFullyEntered(r, bt))
 
 export const calculateAmounts = (r: Registration) => {
-  const testTotal = r.bloodTests?.reduce((s: any, t: { price: any }) => s + t.price, 0) || 0
+  // Use tpa_price if tpa is true and tpa_price is a number, else use price
+  const testTotal = r.bloodTests?.reduce((s: any, t: { price: any, tpa_price?: any }) => {
+    if (r.tpa && typeof t.tpa_price === 'number') {
+      return s + t.tpa_price;
+    }
+    return s + t.price;
+  }, 0) || 0
 
   if (r.paymentHistory && typeof r.paymentHistory === "object" && "totalAmount" in r.paymentHistory) {
     const paymentData = r.paymentHistory as PaymentHistory
@@ -174,7 +180,10 @@ export const downloadBill = (selectedRegistration: Registration) => {
     )
     y += 4
 
-    const rows = selectedRegistration.bloodTests?.map((t) => [t.testName, t.price.toFixed(2)]) ?? []
+    const rows = selectedRegistration.bloodTests?.map((t) => [
+      t.testName,
+      (selectedRegistration.tpa && typeof t.tpa_price === 'number' ? t.tpa_price : t.price).toFixed(2)
+    ]) ?? []
     autoTable(doc, {
       head: [["Test Name", "Amount"]],
       body: rows,
@@ -442,7 +451,10 @@ export const generateBillBlob = async (selectedRegistration: Registration): Prom
       )
       y += 4
 
-      const rows = selectedRegistration.bloodTests?.map((t) => [t.testName, t.price.toFixed(2)]) ?? []
+      const rows = selectedRegistration.bloodTests?.map((t) => [
+        t.testName,
+        (selectedRegistration.tpa && typeof t.tpa_price === 'number' ? t.tpa_price : t.price).toFixed(2)
+      ]) ?? []
       autoTable(doc, {
         head: [["Test Name", "Amount"]],
         body: rows,
