@@ -367,7 +367,11 @@ const BloodValuesForm: React.FC = () => {
 
       try {
         const r = Function('"use strict";return (' + expr + ");")()
-        if (!isNaN(r)) setValue(`tests.${tIdx}.parameters.${pIdx}.value`, fmt3(r), { shouldValidate: false })
+        if (!isNaN(r)) {
+          // Format to exactly 2 decimal places
+          const formatted = Number(r).toFixed(2)
+          setValue(`tests.${tIdx}.parameters.${pIdx}.value`, formatted, { shouldValidate: false })
+        }
       } catch (e) {
         console.error(`Error evaluating formula for ${p.name}:`, e)
       }
