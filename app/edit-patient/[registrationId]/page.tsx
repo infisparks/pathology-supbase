@@ -468,7 +468,7 @@ export default function EditPatientPage() {
       const totalPaidFormatted = totalPaid.toFixed(2)
       const remainingAmountFormatted = remainingAmount.toFixed(2)
       const bloodTestNames = data.bloodTests.map((test) => test.testName).join(", ") || "No blood tests booked."
-      const whatsappMessage = `Dear *${patientName}*,\n\nYour appointment at *MEDFORD HOSPITAL* on *${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
+      const whatsappMessage = `Dear *${patientName}*,\n\nWe have received your request for: ${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
       const whatsappPayload = {
         token: "99583991573",
         number: `91${patientContact}`,
