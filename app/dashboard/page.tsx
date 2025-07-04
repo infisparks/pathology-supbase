@@ -15,6 +15,39 @@ import {
 } from "./lib/dashboard-utils"
 import type { Registration, DashboardMetrics, PaymentHistory } from "./types/dashboard"
 
+/**
+ * Convert ISO (UTC) string to local datetime-local string (for <input type="datetime-local" />)
+ */
+function toLocalInputValue(isoDateString?: string) {
+  if (!isoDateString) return formatLocalDateTime() // fallback to now
+  const date = new Date(isoDateString)
+  const off = date.getTimezoneOffset()
+  const local = new Date(date.getTime() - off * 60 * 1000)
+  return local.toISOString().slice(0, 16)
+}
+
+/**
+ * Format datetime-local string ("YYYY-MM-DDTHH:MM") or ISO to 12-hour display in local time
+ */
+function format12HourLocal(dateString?: string) {
+  if (!dateString) return "-"
+  let d =
+    dateString.includes("T") && dateString.length <= 16
+      ? new Date(dateString + ":00")
+      : new Date(dateString)
+  if (isNaN(d.getTime())) return "-"
+  let hours = d.getHours()
+  const minutes = d.getMinutes()
+  const ampm = hours >= 12 ? "PM" : "AM"
+  hours = hours % 12
+  hours = hours ? hours : 12
+  const minutesStr = minutes < 10 ? "0" + minutes : minutes
+  const day = d.getDate().toString().padStart(2, "0")
+  const month = (d.getMonth() + 1).toString().padStart(2, "0")
+  const year = d.getFullYear()
+  return `${day}/${month}/${year}, ${hours}:${minutesStr} ${ampm}`
+}
+
 export default function Dashboard() {
   /* --- state --- */
   const [registrations, setRegistrations] = useState<Registration[]>([])
@@ -46,9 +79,10 @@ export default function Dashboard() {
   const [endDate, setEndDate] = useState<string>(todayStr)
 
   const [sampleModalRegistration, setSampleModalRegistration] = useState<Registration | null>(null)
-  const [sampleDateTime, setSampleDateTime] = useState<string>(formatLocalDateTime)
+  const [sampleDateTime, setSampleDateTime] = useState<string>(formatLocalDateTime())
 
   const [tempDiscount, setTempDiscount] = useState<string>("")
+  const [amountId, setAmountId] = useState<string>("")
 
   const filterContentRef = useRef<HTMLDivElement>(null)
 
@@ -62,9 +96,16 @@ export default function Dashboard() {
     return () => clearTimeout(timer)
   }, [])
 
+  useEffect(() => {
+    if (sampleModalRegistration?.sampleCollectedAt) {
+      setSampleDateTime(toLocalInputValue(sampleModalRegistration.sampleCollectedAt))
+    } else if (sampleModalRegistration) {
+      setSampleDateTime(formatLocalDateTime())
+    }
+  }, [sampleModalRegistration])
+
   // Fetch Dashboard Stats
   const fetchDashboardStats = useCallback(async () => {
-    console.log("Dashboard: Fetching dashboard stats...")
     try {
       const today = new Date().toISOString().split("T")[0]
 
@@ -124,14 +165,6 @@ export default function Dashboard() {
         pendingReports: pendingTestsCount,
         completedTests: completedTestsCount,
       })
-      console.log("Dashboard: Metrics updated:", {
-        totalRegistrations: totalRegistrationsCount,
-        todayRegistrations: todayRegistrationsCount,
-        totalRevenue,
-        todayRevenue,
-        pendingReports: pendingTestsCount,
-        completedTests: completedTestsCount,
-      })
     } catch (error: any) {
       console.error("Dashboard: Error fetching dashboard stats:", error.message)
     }
@@ -140,7 +173,6 @@ export default function Dashboard() {
   // Fetch Registrations (all data)
   const fetchRegistrations = useCallback(async () => {
     setIsLoading(true)
-    console.log("Dashboard: Fetching all registrations...")
     try {
       const { data, error } = await supabase
         .from("registration")
@@ -159,8 +191,6 @@ export default function Dashboard() {
         throw error
       }
 
-      console.log("Dashboard: Raw Supabase registration data received:", data)
-
       const mappedData: Registration[] = (data || []).map((registrationRow: any) => {
         const patientDetail = registrationRow.patientdetial || {}
 
@@ -177,7 +207,6 @@ export default function Dashboard() {
           sampleCollectedAt: registrationRow.samplecollected_time,
           paymentHistory: registrationRow.amount_paid_history || null,
           hospitalName: registrationRow.hospital_name,
-          paymentMode: registrationRow.payment_mode,
 
           patient_id: registrationRow.patient_id,
           name: patientDetail.name || "Unknown",
@@ -198,23 +227,18 @@ export default function Dashboard() {
       })
 
       setRegistrations(sortedRegistrations)
-      console.log("Dashboard: All registrations loaded successfully. Total:", sortedRegistrations.length)
     } catch (error: any) {
       console.error("Dashboard: Error fetching registrations:", error.message)
     } finally {
       setIsLoading(false)
-      console.log("Dashboard: Loading set to false.")
     }
   }, [])
 
   // Realtime Subscriptions
   useEffect(() => {
-    console.log("Dashboard: Setting up Supabase Realtime subscriptions...")
-
     const registrationChannel = supabase
       .channel("registration_changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "registration" }, (payload) => {
-        console.log("Realtime: registration change received!", payload)
         fetchRegistrations()
         fetchDashboardStats()
       })
@@ -223,14 +247,12 @@ export default function Dashboard() {
     const patientDetialChannel = supabase
       .channel("patient_detial_changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "patientdetial" }, (payload) => {
-        console.log("Realtime: patientdetial change received!", payload)
         fetchRegistrations()
         fetchDashboardStats()
       })
       .subscribe()
 
     return () => {
-      console.log("Dashboard: Unsubscribing from Supabase Realtime channels.")
       supabase.removeChannel(registrationChannel)
       supabase.removeChannel(patientDetialChannel)
     }
@@ -281,16 +303,15 @@ export default function Dashboard() {
   /* --- actions --- */
   const handleSaveSampleDate = useCallback(async () => {
     if (!sampleModalRegistration) return
-    console.log("Dashboard: Saving sample date for registration:", sampleModalRegistration.id)
     try {
+      const utc = new Date(sampleDateTime)
+      const isoString = utc.toISOString()
       const { error } = await supabase
         .from("registration")
-        .update({ samplecollected_time: new Date(sampleDateTime).toISOString() })
+        .update({ samplecollected_time: isoString })
         .eq("id", sampleModalRegistration.id)
       if (error) throw error
       alert(`Sample time updated for ${sampleModalRegistration.name}`)
-      console.log("Dashboard: Sample time updated successfully.")
-      // Auto-refresh registrations after update
       fetchRegistrations()
     } catch (e: any) {
       console.error("Dashboard: Error saving sample time:", e.message)
@@ -305,7 +326,6 @@ export default function Dashboard() {
       if (!confirm(`Delete registration for ${r.name}? This will permanently remove the registration record.`)) return
 
       try {
-        // Fetch the registration data before deleting
         const { data: regData, error: regError } = await supabase
           .from("registration")
           .select("*")
@@ -314,18 +334,15 @@ export default function Dashboard() {
         if (regError) throw regError
         if (!regData) throw new Error("Registration not found!")
 
-        // Prepare data for the deleted_data table
         const deletedData = {
           ...regData,
-          deleted: true, // Mark as deleted in the new table
-          deleted_time: new Date().toISOString(), // Record deletion time
+          deleted: true,
+          deleted_time: new Date().toISOString(),
         }
 
-        // Insert into deleted_data table
         const { error: insertError } = await supabase.from("deleted_data").insert([deletedData])
         if (insertError) throw insertError
 
-        // Delete from the original registration table
         const { error: delRegError } = await supabase.from("registration").delete().eq("id", r.id)
         if (delRegError) throw delRegError
 
@@ -377,9 +394,9 @@ export default function Dashboard() {
     downloadMultipleBills(selectedRegistrations, registrations)
   }, [selectedRegistrations, registrations])
 
+  // ---------- FIXED PART ----------
   const handleUpdateAmountAndDiscount = useCallback(async () => {
     if (!selectedRegistration) return
-    console.log("Dashboard: Updating amount and discount for registration:", selectedRegistration.id)
 
     const additionalPayment = Number.parseFloat(newAmountPaid) || 0
     const newDiscountAmount = Number.parseFloat(tempDiscount) || 0
@@ -425,7 +442,10 @@ export default function Dashboard() {
             : currentPaymentHistory.paymentHistory,
       }
 
-      const newTotalPaid = updatedPaymentHistory.paymentHistory.reduce((sum, payment) => sum + payment.amount, 0)
+      const newTotalPaid = updatedPaymentHistory.paymentHistory.reduce(
+        (sum, payment) => sum + payment.amount,
+        0,
+      )
 
       const updateData: any = {
         discount_amount: newDiscountAmount,
@@ -444,18 +464,18 @@ export default function Dashboard() {
       })
 
       setNewAmountPaid("")
+      setAmountId("")
       setPaymentMode("online")
       alert("Payment and discount updated successfully!")
-      console.log("Dashboard: Payment and discount updated successfully.")
     } catch (error: any) {
       console.error("Dashboard: Error updating payment and discount:", error.message)
       alert("Error updating payment and discount. Please try again.")
     }
   }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode])
+  // ---------- END FIXED PART ----------
 
   return (
     <div className="flex h-screen bg-gray-50">
-     
       <div className="flex-1 overflow-auto">
         <div className="p-8">
           <DashboardHeader
@@ -488,7 +508,6 @@ export default function Dashboard() {
             handleToggleSelect={handleToggleSelect}
             expandedRegistrationId={expandedRegistrationId}
             setExpandedRegistrationId={setExpandedRegistrationId}
-            // role={role}
             setSampleModalRegistration={setSampleModalRegistration}
             setSampleDateTime={setSampleDateTime}
             setSelectedRegistration={setSelectedRegistration}
@@ -520,13 +539,21 @@ export default function Dashboard() {
         handleSaveSampleDate={handleSaveSampleDate}
         fakeBillRegistration={fakeBillRegistration}
         setFakeBillRegistration={setFakeBillRegistration}
-        formatLocalDateTime={formatLocalDateTime} deleteRequestModalRegistration={null} setDeleteRequestModalRegistration={function (reg: Registration | null): void {
+        formatLocalDateTime={formatLocalDateTime}
+        deleteRequestModalRegistration={null}
+        setDeleteRequestModalRegistration={function (reg: Registration | null): void {
           throw new Error("Function not implemented.")
-        } } deleteReason={""} setDeleteReason={function (reason: string): void {
+        }}
+        deleteReason={""}
+        setDeleteReason={function (reason: string): void {
           throw new Error("Function not implemented.")
-        } } submitDeleteRequest={function (): void {
+        }}
+        submitDeleteRequest={function (): void {
           throw new Error("Function not implemented.")
-        } }      />
+        }}
+        amountId={amountId}
+        setAmountId={setAmountId}
+      />
     </div>
   )
 }

@@ -62,7 +62,6 @@ export const calculateTotalsForSelected = (selectedIds: number[], registrations:
 
 export const formatLocalDateTime = () => {
   const now = new Date();
-  // Get date/time in Asia/Kolkata
   const formatter = new Intl.DateTimeFormat('en-CA', {
     year: 'numeric',
     month: '2-digit',
@@ -93,7 +92,6 @@ export const formatCurrency = (amount: number) => {
 
 export const getRank = (r: Registration) => (!r.sampleCollectedAt ? 1 : isAllTestsComplete(r) ? 3 : 2)
 export const getMergedPatientId = (registration: Registration) => {
-  // Prefer both; fallback as needed
   if (registration.patientId && registration.registration_id) {
     return `${registration.patientId}-${registration.registration_id}`;
   }
@@ -140,7 +138,6 @@ export const downloadBill = (selectedRegistration: Registration) => {
 
     let y = 70
 
-    // Helper to draw a key/value row
     const drawRow = (kL: string, vL: string, kR: string, vR: string) => {
       doc.text(kL, leftKeyX, y)
       doc.text(":", leftColonX, y)
@@ -151,12 +148,10 @@ export const downloadBill = (selectedRegistration: Registration) => {
       y += 6
     }
 
-    // Build full name with title
     const fullName = selectedRegistration.title
       ? `${selectedRegistration.title.toUpperCase()} ${selectedRegistration.name}`
       : selectedRegistration.name
 
-    // Determine age unit
     const unit =
       selectedRegistration.day_type === "month"
         ? "m"
@@ -164,8 +159,7 @@ export const downloadBill = (selectedRegistration: Registration) => {
         ? "d"
         : "y"
 
-        drawRow("Name", fullName, "Patient ID", getMergedPatientId(selectedRegistration))
-
+    drawRow("Name", fullName, "Patient ID", getMergedPatientId(selectedRegistration))
     drawRow(
       "Age / Gender",
       `${selectedRegistration.age}${unit} / ${selectedRegistration.gender}`,
@@ -178,7 +172,7 @@ export const downloadBill = (selectedRegistration: Registration) => {
       "Contact",
       selectedRegistration.contact?.toString() ?? "N/A"
     )
-        y += 4
+    y += 4
 
     const rows = selectedRegistration.bloodTests?.map((t) => [t.testName, t.price.toFixed(2)]) ?? []
     autoTable(doc, {
@@ -323,7 +317,7 @@ export const downloadMultipleBills = (selectedRegistrations: number[], allRegist
           "Contact",
           registration.contact?.toString() ?? "N/A"
         )
-            y += 4
+        y += 4
 
         const rows = registration.bloodTests?.map((t) => [t.testName, t.price.toFixed(2)]) ?? []
         autoTable(doc, {
@@ -379,4 +373,126 @@ export const downloadMultipleBills = (selectedRegistrations: number[], allRegist
   }
 
   img.onerror = () => alert("Failed to load letterhead image.")
+}
+
+// --- Add this at the end of your file for WhatsApp uploads etc ---
+export const generateBillBlob = async (selectedRegistration: Registration): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.src = (letterhead as any).src ?? (letterhead as any)
+    img.crossOrigin = "anonymous"
+    img.onload = () => {
+      const canvas = document.createElement("canvas")
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext("2d")!
+      ctx.drawImage(img, 0, 0)
+      const bgDataUrl = canvas.toDataURL("image/jpeg", 0.5)
+
+      const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" })
+      const pageW = doc.internal.pageSize.getWidth()
+
+      doc.addImage(bgDataUrl, "JPEG", 0, 0, pageW, doc.internal.pageSize.getHeight())
+      doc.setFont("helvetica", "normal").setFontSize(12)
+
+      const margin = 14
+      const colMid = pageW / 2
+      const leftKeyX = margin
+      const leftColonX = margin + 40
+      const leftValueX = margin + 44
+      const rightKeyX = colMid + margin
+      const rightColonX = colMid + margin + 40
+      const rightValueX = colMid + margin + 44
+
+      let y = 70
+
+      const drawRow = (kL: string, vL: string, kR: string, vR: string) => {
+        doc.text(kL, leftKeyX, y)
+        doc.text(":", leftColonX, y)
+        doc.text(vL, leftValueX, y)
+        doc.text(kR, rightKeyX, y)
+        doc.text(":", rightColonX, y)
+        doc.text(vR, rightValueX, y)
+        y += 6
+      }
+
+      const fullName = selectedRegistration.title
+        ? `${selectedRegistration.title.toUpperCase()} ${selectedRegistration.name}`
+        : selectedRegistration.name
+
+      const unit =
+        selectedRegistration.day_type === "month"
+          ? "m"
+          : selectedRegistration.day_type === "day"
+          ? "d"
+          : "y"
+
+      drawRow("Name", fullName, "Patient ID", getMergedPatientId(selectedRegistration))
+      drawRow(
+        "Age / Gender",
+        `${selectedRegistration.age}${unit} / ${selectedRegistration.gender}`,
+        "Registration Date",
+        new Date(selectedRegistration.createdAt).toLocaleDateString()
+      )
+      drawRow(
+        "Ref. Doctor",
+        selectedRegistration.doctor_name || "N/A",
+        "Contact",
+        selectedRegistration.contact?.toString() ?? "N/A"
+      )
+      y += 4
+
+      const rows = selectedRegistration.bloodTests?.map((t) => [t.testName, t.price.toFixed(2)]) ?? []
+      autoTable(doc, {
+        head: [["Test Name", "Amount"]],
+        body: rows,
+        startY: y,
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 11 },
+        headStyles: { fillColor: [30, 79, 145], fontStyle: "bold" },
+        columnStyles: { 1: { fontStyle: "bold" } },
+        margin: { left: margin, right: margin },
+      })
+      y = (doc as any).lastAutoTable.finalY + 10
+
+      const { testTotal, remaining, discount } = calculateAmounts(selectedRegistration)
+      const remainingWords = toWords(Math.round(remaining))
+
+      autoTable(doc, {
+        head: [["Description", "Amount"]],
+        body: [
+          ["Test Total", testTotal.toFixed(2)],
+          ["Discount", discount.toFixed(2)],
+          ["Amount Paid", selectedRegistration.amountPaid.toFixed(2)],
+          ["Remaining", remaining.toFixed(2)],
+        ],
+        startY: y,
+        theme: "plain",
+        styles: { font: "helvetica", fontSize: 11 },
+        columnStyles: { 1: { fontStyle: "bold" } },
+        margin: { left: margin, right: margin },
+      })
+      y = (doc as any).lastAutoTable.finalY + 8
+
+      doc
+        .setFont("helvetica", "normal")
+        .setFontSize(10)
+        .text(
+          `(${remainingWords.charAt(0).toUpperCase() + remainingWords.slice(1)} only)`,
+          pageW - margin,
+          y,
+          { align: "right" }
+        )
+      y += 12
+
+      doc
+        .setFont("helvetica", "italic")
+        .setFontSize(10)
+        .text("Thank you for choosing our services!", pageW / 2, y, { align: "center" })
+
+      // THIS LINE IS NOW SYNCHRONOUS
+      resolve(doc.output("blob"))
+    }
+    img.onerror = () => reject("Failed to load letterhead image.")
+  })
 }

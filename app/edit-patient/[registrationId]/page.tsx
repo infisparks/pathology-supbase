@@ -258,8 +258,7 @@ export default function EditPatientPage() {
           gender: patient.gender || "",
           address: patient.address || "",
           email: "",
-          doctorName: "",
-          doctorId: null,
+          doctorName: registrationData.doctor_name || "",
           bloodTests: bloodTests,
           discountAmount: discountAmount,
           paymentEntries: paymentEntries,
@@ -270,6 +269,7 @@ export default function EditPatientPage() {
           registrationTime: registrationData.registration_time
             ? isoToTime12(registrationData.registration_time)
             : defaultTime,
+          doctorId: null
         }
 
         reset(formData)
@@ -452,6 +452,40 @@ export default function EditPatientPage() {
         .eq("id", registrationId)
 
       throwIfError(regErr)
+
+      // WhatsApp message logic (copied from patient-entry)
+      const patientContact = data.contact
+      const patientName = data.name
+      const registrationDate = data.registrationDate
+      const registrationTime = data.registrationTime
+      const doctorName = data.doctorName
+      const totalAmountFormatted = totalAmount.toFixed(2)
+      const totalPaidFormatted = totalPaid.toFixed(2)
+      const remainingAmountFormatted = remainingAmount.toFixed(2)
+      const bloodTestNames = data.bloodTests.map((test) => test.testName).join(", ") || "No blood tests booked."
+      const whatsappMessage = `Dear *${patientName}*,\n\nYour appointment at *MEDFORD HOSPITAL* on *${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
+      const whatsappPayload = {
+        token: "99583991573",
+        number: `91${patientContact}`,
+        message: whatsappMessage,
+      }
+      try {
+        const whatsappResponse = await fetch("https://wa.medblisss.com/send-text", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(whatsappPayload),
+        })
+        const whatsappResult = await whatsappResponse.json()
+        if (whatsappResponse.ok) {
+          console.log("WhatsApp message sent successfully:", whatsappResult)
+        } else {
+          console.error("Failed to send WhatsApp message:", whatsappResult)
+        }
+      } catch (whatsappError) {
+        console.error("Error sending WhatsApp message:", whatsappError)
+      }
 
       alert("Patient updated successfully ✅")
       router.back()

@@ -1,6 +1,6 @@
 "use client"
 
-import { lazy, Suspense } from "react"
+import { lazy, Suspense, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   XCircleIcon,
@@ -8,8 +8,10 @@ import {
   CreditCardIcon,
   ArrowDownIcon as ArrowDownTrayIcon,
 } from "lucide-react"
-import { calculateAmounts, formatCurrency, format12Hour } from "../lib/dashboard-utils"
+import { calculateAmounts, formatCurrency, format12Hour, generateBillBlob } from "../lib/dashboard-utils"
 import type { Registration } from "../types/dashboard"
+import { supabase } from "@/lib/supabase"
+import { downloadBill } from "../lib/dashboard-utils"
 
 // Lazy load the FakeBill component
 const FakeBill = lazy(() => import("../FakeBill")) // Adjust path if needed
@@ -38,6 +40,8 @@ interface DashboardModalsProps {
   fakeBillRegistration: Registration | null
   setFakeBillRegistration: (reg: Registration | null) => void
   formatLocalDateTime: () => string
+  amountId: string
+  setAmountId: (id: string) => void
 }
 
 export function DashboardModals({
@@ -64,7 +68,57 @@ export function DashboardModals({
   fakeBillRegistration,
   setFakeBillRegistration,
   formatLocalDateTime,
+  amountId,
+  setAmountId,
 }: DashboardModalsProps) {
+  // Add handler for sending bill on WhatsApp
+  const [isSendingBill, setIsSendingBill] = useState(false)
+
+  const handleSendBillWhatsApp = async () => {
+    if (!selectedRegistration) return
+    setIsSendingBill(true)
+    try {
+      // Generate the bill as a PDF blob (do not download)
+      const blob = await generateBillBlob(selectedRegistration)
+      const filename = `reports/bill_${selectedRegistration.id}_${Date.now()}.pdf`
+      const file = new File([blob], filename, { type: 'application/pdf' })
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage.from("reports").upload(filename, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: "application/pdf",
+      })
+      if (uploadError) throw uploadError
+
+      const { data: publicUrlData } = supabase.storage.from("reports").getPublicUrl(filename)
+      const url = publicUrlData.publicUrl
+
+      // WhatsApp API payload
+      const payload = {
+        token: "99583991573",
+        number: "91" + selectedRegistration.contact,
+        imageUrl: url,
+        caption: `Dear ${selectedRegistration.name},\n\nYour bill is now available:\n${url}\n\nRegards,\nYour Lab Team`,
+      }
+      const res = await fetch("https://wa.medblisss.com/send-image-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const errorData = await res.text()
+        alert(`Failed to send via WhatsApp. Status: ${res.status}\n${errorData}`)
+      } else {
+        alert("Bill sent on WhatsApp!")
+      }
+    } catch (e) {
+      alert("Error sending bill on WhatsApp.")
+    } finally {
+      setIsSendingBill(false)
+    }
+  }
+
   return (
     <>
       {/* Payment modal */}
@@ -174,22 +228,32 @@ export function DashboardModals({
                             </div>
                           </div>
 
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Additional Payment (₹)
-                            </label>
-                            <div className="relative">
-                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <BanknotesIcon className="h-4 w-4 text-gray-400" />
+                          <div className="flex gap-2">
+                            <div className="flex-1">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Additional Payment (₹)</label>
+                              <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                  <BanknotesIcon className="h-4 w-4 text-gray-400" />
+                                </div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={newAmountPaid}
+                                  onChange={(e) => setNewAmountPaid(e.target.value)}
+                                  className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                  placeholder="Enter additional payment"
+                                />
                               </div>
+                            </div>
+                            <div className="flex-1">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Amount ID (optional)</label>
                               <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={newAmountPaid}
-                                onChange={(e) => setNewAmountPaid(e.target.value)}
-                                className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                                placeholder="Enter additional payment"
+                                type="text"
+                                value={amountId}
+                                onChange={(e) => setAmountId(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Enter amount ID"
                               />
                             </div>
                           </div>
@@ -219,6 +283,16 @@ export function DashboardModals({
                             Update Payment & Discount
                           </button>
                         </form>
+                        <div className="mb-6">
+                          <button
+                            onClick={handleSendBillWhatsApp}
+                            className="w-full bg-green-600 text-white py-3 rounded-xl font-medium hover:bg-green-700 transition-colors duration-200 shadow-sm flex items-center justify-center disabled:opacity-60"
+                            disabled={isSendingBill}
+                          >
+                            <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M16.72 11.06a6 6 0 10-2.28 2.28l2.54.73a1 1 0 001.26-1.26l-.73-2.54z"></path></svg>
+                            {isSendingBill ? "Sending…" : "Send Bill on WhatsApp"}
+                          </button>
+                        </div>
                       </>
                     )
                   })()}
