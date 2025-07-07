@@ -59,7 +59,7 @@ export function DashboardHeader({
   return (
     <>
       <img
-        src="/infispark.png"
+        src="/INFICARE.png"
         alt="Company Banner"
         width={2000}
         height={200}
