@@ -12,12 +12,21 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import * as XLSX from "xlsx"
 
 // Define types for registration data
+// Update Registration type to match new paymentHistory structure
+type PaymentHistoryItem = {
+  amount: number
+  paymentMode: string // 'cash' or 'online'
+  time: string
+  amountId: string
+}
+
 interface Registration {
   id: string
   created_at: string
-  patient_id: string // Keep patient_id in interface as it's in the DB, but won't be displayed in table
+  patient_id: string
   amount_paid: number
   discount_amount: number
   hospital_name: string
@@ -25,11 +34,7 @@ interface Registration {
   amount_paid_history: {
     totalAmount: number
     discount: number
-    paymentHistory: Array<{
-      date: string
-      amount: number
-      mode: string
-    }>
+    paymentHistory: PaymentHistoryItem[]
   } | null
   visit_type: string
   doctor_name: string
@@ -111,9 +116,91 @@ export default function BillingPage() {
     }, 0)
   }, [registrations])
 
+  // Add summary calculations
+  const totalDiscount = useMemo(() => {
+    return registrations.reduce((sum, reg) => sum + (reg.amount_paid_history?.discount || reg.discount_amount || 0), 0)
+  }, [registrations])
+
+  const totalAmount = useMemo(() => {
+    return registrations.reduce((sum, reg) => sum + (reg.amount_paid_history?.totalAmount || 0), 0)
+  }, [registrations])
+
+  const totalCollected = useMemo(() => {
+    return registrations.reduce((sum, reg) => {
+      if (!reg.amount_paid_history?.paymentHistory) return sum
+      return sum + reg.amount_paid_history.paymentHistory.reduce((s, p) => s + (p.amount || 0), 0)
+    }, 0)
+  }, [registrations])
+
+  const totalCash = useMemo(() => {
+    return registrations.reduce((sum, reg) => {
+      if (!reg.amount_paid_history?.paymentHistory) return sum
+      return sum + reg.amount_paid_history.paymentHistory.filter(p => p.paymentMode === 'cash').reduce((s, p) => s + (p.amount || 0), 0)
+    }, 0)
+  }, [registrations])
+
+  const totalOnline = useMemo(() => {
+    return registrations.reduce((sum, reg) => {
+      if (!reg.amount_paid_history?.paymentHistory) return sum
+      return sum + reg.amount_paid_history.paymentHistory.filter(p => p.paymentMode === 'online').reduce((s, p) => s + (p.amount || 0), 0)
+    }, 0)
+  }, [registrations])
+
+  const totalRemaining = useMemo(() => {
+    return registrations.reduce((sum, reg) => {
+      const totalBill = reg.amount_paid_history?.totalAmount || 0
+      const collected = reg.amount_paid_history?.paymentHistory?.reduce((s, p) => s + (p.amount || 0), 0) || 0
+      return sum + (totalBill - collected)
+    }, 0)
+  }, [registrations])
+
   const handleRowClick = (registration: Registration) => {
     setSelectedRegistration(registration)
     setIsModalOpen(true)
+  }
+
+  // Add Excel export handler
+  const handleExportExcel = () => {
+    // Flatten registrations for export
+    const rows = registrations.flatMap((reg) => {
+      const paymentHistory = reg.amount_paid_history?.paymentHistory || []
+      // If no payment history, still export a row
+      if (paymentHistory.length === 0) {
+        return [{
+          "Registration ID": reg.id,
+          "Patient ID": reg.patient_id,
+          "User Name": reg.patient_id, // Replace with actual user name if available
+          "User Number": "", // Replace with actual user number if available
+          "Payment Method": reg.payment_mode,
+          "Payment ID": "",
+          "TPA": reg.visit_type === 'TPA' ? 'Yes' : 'No',
+          "Total Discount": reg.amount_paid_history?.discount || reg.discount_amount || 0,
+          "Test Name": "", // Fill with test name if available
+          "Hospital Name": reg.hospital_name,
+          "Doctor Name": reg.doctor_name,
+          "Date": reg.created_at,
+        }]
+      }
+      // Otherwise, one row per payment
+      return paymentHistory.map((p) => ({
+        "Registration ID": reg.id,
+        "Patient ID": reg.patient_id,
+        "User Name": reg.patient_id, // Replace with actual user name if available
+        "User Number": "", // Replace with actual user number if available
+        "Payment Method": p.paymentMode,
+        "Payment ID": p.amountId || "",
+        "TPA": reg.visit_type === 'TPA' ? 'Yes' : 'No',
+        "Total Discount": reg.amount_paid_history?.discount || reg.discount_amount || 0,
+        "Test Name": "", // Fill with test name if available
+        "Hospital Name": reg.hospital_name,
+        "Doctor Name": reg.doctor_name,
+        "Date": p.time || reg.created_at,
+      }))
+    })
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Billing")
+    XLSX.writeFile(wb, `billing_export_${new Date().toISOString().slice(0,10)}.xlsx`)
   }
 
   return (
@@ -121,17 +208,57 @@ export default function BillingPage() {
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Billing Dashboard</h1>
 
       {/* Revenue Summary */}
-      <Card className="mb-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Amount After Discount</CardTitle> {/* Updated title */}
-          <DollarSign className="h-4 w-4 text-white" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-4xl font-bold">₹{totalAmountAfterDiscount.toLocaleString()}</div>{" "}
-          {/* Display totalAmountAfterDiscount */}
-          <p className="text-xs text-gray-200">+20.1% from last month</p> {/* Placeholder */}
-        </CardContent>
-      </Card>
+      {/* Replace the single summary card with a grid of summary cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <Card className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{totalAmount.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-r from-green-500 to-blue-600 text-white">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Total Discount</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{totalDiscount.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-r from-yellow-500 to-orange-600 text-white">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Total Cash</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{totalCash.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-r from-pink-500 to-red-600 text-white">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Total Online</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{totalOnline.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-r from-gray-500 to-gray-700 text-white">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Total Collected</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{totalCollected.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-r from-indigo-500 to-blue-900 text-white">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Total Remaining</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{totalRemaining.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Filters and Search */}
       <div className="flex flex-wrap items-center gap-4 mb-6">
@@ -199,6 +326,13 @@ export default function BillingPage() {
         </div>
       </div>
 
+      {/* Add Export to Excel button above the table */}
+      <div className="flex justify-end mb-4">
+        <Button onClick={handleExportExcel} variant="outline">
+          Export to Excel
+        </Button>
+      </div>
+
       {/* Registrations Table */}
       <Card>
         <CardHeader>
@@ -220,10 +354,10 @@ export default function BillingPage() {
                     <TableHead>Created At</TableHead>
                     <TableHead>Total Bill</TableHead>
                     <TableHead>Discount</TableHead>
-                    <TableHead>Total Bill After Discount</TableHead>
-                    <TableHead>Collected Amount</TableHead>
-                    <TableHead>Remaining Amount</TableHead>
-                    <TableHead>Payment Mode</TableHead>
+                    <TableHead>Cash</TableHead>
+                    <TableHead>Online</TableHead>
+                    <TableHead>Total Collected</TableHead>
+                    <TableHead>Remaining</TableHead>
                     <TableHead>Hospital</TableHead>
                     <TableHead>Doctor</TableHead>
                     <TableHead>Actions</TableHead>
@@ -232,9 +366,12 @@ export default function BillingPage() {
                 <TableBody>
                   {registrations.map((reg) => {
                     const totalBill = reg.amount_paid_history?.totalAmount || 0
-                    const totalBillAfterDiscount = totalBill - reg.discount_amount
-                    const remainingAmount = totalBill - reg.amount_paid
-
+                    const discount = reg.amount_paid_history?.discount || reg.discount_amount || 0
+                    const paymentHistory = reg.amount_paid_history?.paymentHistory || []
+                    const cash = paymentHistory.filter(p => p.paymentMode === 'cash').reduce((s, p) => s + (p.amount || 0), 0)
+                    const online = paymentHistory.filter(p => p.paymentMode === 'online').reduce((s, p) => s + (p.amount || 0), 0)
+                    const collected = paymentHistory.reduce((s, p) => s + (p.amount || 0), 0)
+                    const remaining = totalBill - collected
                     return (
                       <TableRow
                         key={reg.id}
@@ -244,11 +381,11 @@ export default function BillingPage() {
                         <TableCell className="font-medium">{reg.id}</TableCell>
                         <TableCell>{format(new Date(reg.created_at), "MMM dd, yyyy HH:mm")}</TableCell>
                         <TableCell>₹{totalBill.toLocaleString()}</TableCell>
-                        <TableCell>₹{reg.discount_amount.toLocaleString()}</TableCell>
-                        <TableCell>₹{totalBillAfterDiscount.toLocaleString()}</TableCell>
-                        <TableCell>₹{reg.amount_paid.toLocaleString()}</TableCell>
-                        <TableCell>₹{remainingAmount.toLocaleString()}</TableCell>
-                        <TableCell>{reg.payment_mode}</TableCell>
+                        <TableCell>₹{discount.toLocaleString()}</TableCell>
+                        <TableCell>₹{cash.toLocaleString()}</TableCell>
+                        <TableCell>₹{online.toLocaleString()}</TableCell>
+                        <TableCell>₹{collected.toLocaleString()}</TableCell>
+                        <TableCell>₹{remaining.toLocaleString()}</TableCell>
                         <TableCell>{reg.hospital_name}</TableCell>
                         <TableCell>{reg.doctor_name}</TableCell>
                         <TableCell>
@@ -323,12 +460,12 @@ export default function BillingPage() {
                     {selectedRegistration.amount_paid_history.paymentHistory.map((payment, index) => (
                       <TableRow key={index}>
                         <TableCell>
-                          {payment.date && isValid(new Date(payment.date))
-                            ? format(new Date(payment.date), "MMM dd, yyyy HH:mm")
+                          {payment.time && isValid(new Date(payment.time))
+                            ? format(new Date(payment.time), "MMM dd, yyyy HH:mm")
                             : "N/A"}
                         </TableCell>
                         <TableCell>₹{payment.amount.toLocaleString()}</TableCell>
-                        <TableCell>{payment.mode}</TableCell>
+                        <TableCell>{payment.paymentMode}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

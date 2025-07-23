@@ -88,6 +88,9 @@ export default function Dashboard() {
 
   const [role, setRole] = useState<string>("admin")
 
+  const [dbSearchResults, setDbSearchResults] = useState<Registration[] | null>(null)
+  const [isDbSearchLoading, setIsDbSearchLoading] = useState(false)
+
   /* --- helpers --- */
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -265,8 +268,73 @@ export default function Dashboard() {
     fetchDashboardStats()
   }, [fetchRegistrations, fetchDashboardStats])
 
+  // DB search effect for long search terms
+  useEffect(() => {
+    const term = searchTerm.trim()
+    if (term.length > 8) {
+      setIsDbSearchLoading(true)
+      // Query Supabase for name or number match (case-insensitive)
+      supabase
+        .from("registration")
+        .select(
+          `*,
+        tpa,
+        patientdetial (
+          id, name, patient_id, age, gender, number, address, day_type, total_day, title
+        )`
+        )
+        .or(`patientdetial.name.ilike.%${term}%,patientdetial.number.ilike.%${term}%`)
+        .order("registration_time", { ascending: false })
+        .then(({ data, error }) => {
+          if (error) {
+            setDbSearchResults([])
+            setIsDbSearchLoading(false)
+            return
+          }
+          const mappedData: Registration[] = (data || []).map((registrationRow: any) => {
+            const patientDetail = registrationRow.patientdetial || {}
+            return {
+              id: registrationRow.id,
+              registration_id: registrationRow.id,
+              visitType: registrationRow.visit_type || "",
+              createdAt: registrationRow.registration_time || registrationRow.created_at,
+              discountAmount: registrationRow.discount_amount || 0,
+              amountPaid: registrationRow.amount_paid || 0,
+              doctor_name: registrationRow.doctor_name,
+              bloodTests: registrationRow.bloodtest_data || [],
+              bloodtest: registrationRow.bloodtest_detail || {},
+              sampleCollectedAt: registrationRow.samplecollected_time,
+              paymentHistory: registrationRow.amount_paid_history || null,
+              hospitalName: registrationRow.hospital_name,
+              patient_id: registrationRow.patient_id,
+              name: patientDetail.name || "Unknown",
+              patientId: patientDetail.patient_id || "",
+              age: patientDetail.age || 0,
+              gender: patientDetail.gender,
+              contact: patientDetail.number,
+              address: patientDetail.address,
+              day_type: patientDetail.day_type,
+              total_day: patientDetail.total_day,
+              title: patientDetail.title,
+              tpa: registrationRow.tpa === true,
+            }
+          })
+          const sorted = mappedData.sort((a, b) => {
+            const rankDiff = getRank(a) - getRank(b)
+            return rankDiff !== 0 ? rankDiff : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          })
+          setDbSearchResults(sorted)
+          setIsDbSearchLoading(false)
+        })
+    } else {
+      setDbSearchResults(null)
+      setIsDbSearchLoading(false)
+    }
+  }, [searchTerm])
+
   /* --- filters --- */
   const filteredRegistrations = useMemo(() => {
+    if (dbSearchResults !== null) return dbSearchResults
     const start = startDate ? new Date(`${startDate}T00:00:00`) : null
     const end = endDate ? new Date(`${endDate}T23:59:59`) : null
 
@@ -299,7 +367,7 @@ export default function Dashboard() {
 
       return true
     })
-  }, [registrations, searchTerm, startDate, endDate, statusFilter, role])
+  }, [registrations, searchTerm, startDate, endDate, statusFilter, role, dbSearchResults])
 
   /* --- actions --- */
   const handleSaveSampleDate = useCallback(async () => {
@@ -516,7 +584,7 @@ export default function Dashboard() {
 
           <RegistrationList
             filteredRegistrations={filteredRegistrations}
-            isLoading={isLoading}
+            isLoading={isLoading || isDbSearchLoading}
             showCheckboxes={showCheckboxes}
             selectAll={selectAll}
             handleToggleSelectAll={handleToggleSelectAll}

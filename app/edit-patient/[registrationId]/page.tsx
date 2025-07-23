@@ -475,7 +475,7 @@ export default function EditPatientPage() {
         message: whatsappMessage,
       }
       try {
-        const whatsappResponse = await fetch("https://wa.medblisss.com/send-text", {
+        const whatsappResponse = await fetch("https://a.infispark.in/send-text", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

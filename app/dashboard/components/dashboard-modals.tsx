@@ -101,7 +101,7 @@ export function DashboardModals({
         imageUrl: url,
         caption: `Dear ${selectedRegistration.name},\n\nYour bill is now available:\n${url}\n\nRegards,\nYour Lab Team`,
       }
-      const res = await fetch("https://wa.medblisss.com/send-image-url", {
+      const res = await fetch("https://a.infispark.in/send-image-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

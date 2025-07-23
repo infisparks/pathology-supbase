@@ -24,6 +24,8 @@ import { UserCircle, Phone, Calendar, Clock, Plus, X, Search, Trash2 } from "luc
 
 import { Checkbox } from "@/components/ui/checkbox"
 
+import { generatePatientIdWithSequence } from "@/lib/patient_id_generator"
+
 /**
  * -----------------------------
  *   Helpers and constants
@@ -48,14 +50,6 @@ function time12ToISO(date: string, time12: string) {
   if (mer === "PM" && hh < 12) hh += 12
   if (mer === "AM" && hh === 12) hh = 0
   return new Date(`${date}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`).toISOString()
-}
-
-async function generatePatientId() {
-  const now = new Date()
-  const YY = String(now.getFullYear()).slice(-2) // Last 2 digits of year
-  const MM = String(now.getMonth() + 1).padStart(2, "0") // Month (01-12)
-  const DD = String(now.getDate()).padStart(2, "0") // Day (01-31)
-  return `${YY}${MM}${DD}`
 }
 
 /**
@@ -112,6 +106,7 @@ interface IFormInput {
   // New field to track if this is an existing patient
   existingPatientId?: number
   tpa: boolean // true = TPA, false = Normal
+  selectedPackageId?: string // <-- add this
 }
 
 interface PackageType {
@@ -179,6 +174,7 @@ export default function PatientEntryForm() {
       paymentEntries: [],
       existingPatientId: undefined,
       tpa: false, // Default to Normal
+      selectedPackageId: '', // <-- add this
     },
   })
 
@@ -340,7 +336,7 @@ export default function PatientEntryForm() {
         console.log("Using existing patient with ID:", patientDatabaseId)
       } else {
         // Create new patient
-        if (!data.patientId) data.patientId = await generatePatientId()
+        if (!data.patientId) data.patientId = await generatePatientIdWithSequence()
         const mult = data.dayType === "year" ? 360 : data.dayType === "month" ? 30 : 1
         const totalDay = data.age * mult
         const { data: patientRow, error: patientErr } = await supabase
@@ -412,7 +408,7 @@ export default function PatientEntryForm() {
       }
 
       try {
-        const whatsappResponse = await fetch("https://wa.medblisss.com/send-text", {
+        const whatsappResponse = await fetch("https://a.infispark.in/send-text", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -465,6 +461,7 @@ export default function PatientEntryForm() {
     paymentEntries: [],
     existingPatientId: undefined,
     tpa: false, // Default to Normal
+    selectedPackageId: '', // Default to empty
   })
 
   /** ------------------------------
@@ -758,6 +755,42 @@ export default function PatientEntryForm() {
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-lg font-semibold text-gray-700">Blood Tests</h3>
                     <div className="flex items-center space-x-1">
+                      {/* Package selection (optional, inline) */}
+                      <div className="flex items-center mr-2">
+                        <Label className="text-xs mr-1">Package</Label>
+                        <Select
+                          value={watch('selectedPackageId') || 'none'}
+                          onValueChange={async (pkgId) => {
+                            setValue('selectedPackageId', pkgId)
+                            if (!pkgId || pkgId === 'none') return
+                            const pkg = packageRows.find((p) => String(p.id) === String(pkgId))
+                            if (pkg) {
+                              removeAllTests()
+                              pkg.tests.forEach((t) => {
+                                appendBloodTest({
+                                  testId: t.testId,
+                                  testName: t.testName,
+                                  price: t.price,
+                                  testType: t.testType,
+                                })
+                              })
+                              setValue('discountAmount', pkg.discountamount || 0)
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-7 w-48">
+                            <SelectValue placeholder="Select package" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No Package</SelectItem>
+                            {packageRows.map((pkg) => (
+                              <SelectItem key={pkg.id} value={String(pkg.id)}>
+                                {pkg.package_name} (₹{pkg.discountamount} OFF)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <Button type="button" variant="outline" size="sm" onClick={addAllTests}>
                         Add All
                       </Button>
