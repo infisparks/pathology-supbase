@@ -856,6 +856,11 @@ export const generateReportPdf = async (
   aiSuggestions?: AiSuggestions,
   includeAiSuggestionsPage = false,
 ) => {
+  console.log("PDF Generator received data:", {
+    bloodtest: data.bloodtest,
+    selectedTests: selectedTests,
+    reportType: reportType
+  })
   const doc = new jsPDF("p", "mm", "a4")
   
   const firstTestKey = Object.keys(data.bloodtest || {})[0]
@@ -1036,9 +1041,19 @@ export const generateReportPdf = async (
     const numRange = parseNumericRangeString(rangeStr)
     const numVal = Number.parseFloat(rawValue)
     const isValueOutOfRange = numRange && !isNaN(numVal) && (numVal < numRange.lower || numVal > numRange.upper)
+    
+    // Determine if value is low or high
+    let valueWithIndicator = valStr
+    if (isValueOutOfRange && numRange) {
+      if (numVal < numRange.lower) {
+        valueWithIndicator = `${valStr} L`
+      } else if (numVal > numRange.upper) {
+        valueWithIndicator = `${valStr} H`
+      }
+    }
 
     doc.setFont("helvetica", isValueOutOfRange ? "bold" : "normal")
-    doc.text(valStr, x2 + 2, y + 4)
+    doc.text(valueWithIndicator, x2 + 2, y + 4)
     doc.setFont("helvetica", "normal")
 
     if (!fullyMerged) {
@@ -1061,6 +1076,11 @@ export const generateReportPdf = async (
   }
 
   const printTest = async (testKey: string, tData: BloodTestData, y: number): Promise<number> => {
+    console.log(`Printing test ${testKey}:`, {
+      reportedOn: tData.reportedOn,
+      testData: tData
+    })
+    
     y = await ensureSpace(y, 20, tData.reportedOn)
 
     doc.setDrawColor(0, 51, 102).setLineWidth(0.5)
@@ -1279,8 +1299,10 @@ export const generateReportPdf = async (
               if (numRange && !isNaN(numVal)) {
                 if (numVal < numRange.lower) {
                   isOutOfRange = true
+                  valueToDisplay = `${rawValue} L`
                 } else if (numVal > numRange.upper) {
                   isOutOfRange = true
+                  valueToDisplay = `${rawValue} H`
                 }
               }
               doc.setFont("helvetica", isOutOfRange ? "bold" : "normal").setTextColor(0, 0, 0)
@@ -1354,7 +1376,19 @@ export const generateReportPdf = async (
   // 3. Main Report Content Pages
   // Always add a new page for the actual report content.
 // 3. Main Report Content Pages
-let currentY = headerY(data.createdAt);
+
+// Get the first test's reportedOn time for the initial header
+const initialTestKey = Object.keys(data.bloodtest || {}).find(key => selectedTests.includes(key))
+const firstTestReportedOn = initialTestKey ? data.bloodtest![initialTestKey]?.reportedOn : data.createdAt
+
+console.log("First test setup:", {
+  initialTestKey,
+  firstTestReportedOn,
+  registrationTime: data.createdAt,
+  isDifferent: firstTestReportedOn !== data.createdAt
+})
+
+let currentY = headerY(firstTestReportedOn);
 let isFirstReportPage = doc.getNumberOfPages() === 1
 
 
@@ -1363,13 +1397,13 @@ if (!isFirstReportPage) {
   if (loadedLetterhead) {
     doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
   }
-  currentY = headerY(data.createdAt)
+  currentY = headerY(firstTestReportedOn)
   await addStampsAndPrintedBy(doc, w, h, left, printedBy)
 } else {
   if (loadedLetterhead) {
     doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
   }
-  currentY = headerY(data.createdAt)
+  currentY = headerY(firstTestReportedOn)
   await addStampsAndPrintedBy(doc, w, h, left, printedBy)
 }
 

@@ -514,13 +514,25 @@ const BloodValuesForm: React.FC = () => {
           })
           .filter(Boolean) as TestParameterValue[]
 
-        bloodtestDetail[key] = {
-          parameters: params,
-          testId: t.testId,
-          subheadings: t.subheadings || [],
-          createdAt: existingBloodtestDetail[key]?.createdAt || now,
-          reportedOn: now,
-          enteredBy,
+        // Only save test data if there are actual parameters with values
+        if (params.length > 0) {
+          const existingReportedOn = existingBloodtestDetail[key]?.reportedOn
+          const newReportedOn = existingReportedOn || now
+          
+          console.log(`Test ${key}:`, {
+            existingReportedOn: existingReportedOn ? new Date(existingReportedOn).toLocaleString() : 'None',
+            newReportedOn: new Date(newReportedOn).toLocaleString(),
+            isNew: !existingReportedOn
+          })
+          
+          bloodtestDetail[key] = {
+            parameters: params,
+            testId: t.testId,
+            subheadings: t.subheadings || [],
+            createdAt: existingBloodtestDetail[key]?.createdAt || now,
+            reportedOn: newReportedOn, // Only set if not already present
+            enteredBy,
+          }
         }
       }
 

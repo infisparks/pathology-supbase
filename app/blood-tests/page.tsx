@@ -50,6 +50,7 @@ export interface Parameter {
 export interface Subheading {
   title: string
   parameterNames: { name: string }[] // Changed from string[] to { name: string }[]
+  is100?: boolean // Added this line for the new property
 }
 
 export interface BloodTestFormInputs {
@@ -391,6 +392,14 @@ const SubheadingEditor: React.FC<SubheadingEditorProps> = ({
         {subheadingTitleErr && <p className="text-red-500 text-xs">{subheadingTitleErr}</p>}
       </div>
 
+      {/* is100 checkbox (for differential count, if applicable) */}
+      <div className="mt-2 flex items-center space-x-2">
+        <input type="checkbox" {...register(`subheadings.${index}.is100`)} id={`is100-${index}`} />
+        <label htmlFor={`is100-${index}`} className="text-xs">
+          This subheading's parameters sum to 100% (e.g., Differential Count)
+        </label>
+      </div>
+
       {/* Parameter Names */}
       <div className="mt-2">
         <h4 className="text-xs font-medium">Select Parameters</h4>
@@ -461,7 +470,12 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
             price: testData.price,
             tpa_price: testData.tpa_price ?? undefined,
             parameters: testData.parameters,
-            subheadings: testData.subheadings,
+            subheadings: testData.subheadings.map((sh) => ({
+              // Ensure is100 is correctly mapped
+              title: sh.title,
+              parameterNames: sh.parameterNames,
+              is100: sh.is100 || false, // Default to false if not present
+            })),
             isOutsource: testData.isOutsource || false,
           }
         : {
@@ -534,6 +548,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
           // Transform back to string[] for Supabase
           title: sh.title,
           parameterNames: sh.parameterNames.map((p) => p.name),
+          is100: sh.is100, // Include is100 when saving
         })),
       }
       if (data.tpa_price !== undefined && data.tpa_price !== null) { // FIX APPLIED HERE
@@ -593,6 +608,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
       const transformedSubheadings = parsed.subheadings.map((sh: any) => ({
         title: sh.title,
         parameterNames: sh.parameterNames.map((p: any) => p.name),
+        is100: sh.is100 === "true" || sh.is100 === true, // Convert string "true" to boolean true
       }))
 
       const payload: any = {
@@ -639,6 +655,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
         parameterNames: (sh.parameterNames || []).map((name: string | { name: string }) =>
           typeof name === "string" ? { name } : name,
         ),
+        is100: sh.is100 === "true" || sh.is100 === true, // Convert string "true" to boolean true
       }))
       reset({ ...parsedJson, subheadings: transformedSubheadings })
       setIsJsonEditor(false)
@@ -829,7 +846,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
               </div>
               <button
                 type="button"
-                onClick={() => subheadingFields.append({ title: "", parameterNames: [] })}
+                onClick={() => subheadingFields.append({ title: "", parameterNames: [], is100: false })}
                 className="mt-2 inline-flex items-center px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
               >
                 <FaPlus className="mr-1" /> Add Subheading
@@ -936,9 +953,10 @@ export default function BloodTestsPage() {
         isOutsource: item.outsource,
         parameters: item.parameter || [], // Ensure it's an array, default to empty
         subheadings: (item.sub_heading || []).map((sh: any) => ({
-          // Transform string[] to { name: string }[]
+          // Transform string[] to { name: string }[] and handle is100
           title: sh.title,
           parameterNames: (sh.parameterNames || []).map((name: string) => ({ name })),
+          is100: sh.is100 === true || sh.is100 === "true", // Ensure boolean conversion
         })),
         created_at: item.created_at,
       }))
@@ -1071,7 +1089,12 @@ export default function BloodTestsPage() {
                           </TableCell>
                           <TableCell>
                             {test.subheadings && Array.isArray(test.subheadings) ? (
-                              <div className="text-sm text-gray-600">{test.subheadings.length} subheadings</div>
+                              <div className="text-sm text-gray-600">
+                                {test.subheadings.length} subheadings
+                                {test.subheadings.some(sh => sh.is100) && (
+                                    <Badge className="ml-2" variant="secondary">100%</Badge>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-gray-400">-</span>
                             )}

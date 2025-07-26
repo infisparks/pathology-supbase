@@ -193,18 +193,28 @@ function DownloadReport() {
             const testDataInfo =
               parsedBloodtestData?.find((t: any) => slugifyTestName(t.testName) === testKey || t.testName === testKey)
                 ?.testType || "inhouse"
+            
+            console.log(`Loading test ${testKey}:`, {
+              originalReportedOn: testInfo.reportedOn,
+              hasReportedOn: !!testInfo.reportedOn,
+              isNull: testInfo.reportedOn === null,
+              isUndefined: testInfo.reportedOn === undefined,
+              testInfo: testInfo
+            })
+            
             bloodtestFromDetail[testKey] = {
               testId: testKey,
               parameters: testInfo.parameters || [],
               subheadings: testInfo.subheadings || [],
               descriptions: testInfo.descriptions || [],
-              reportedOn: testInfo.reportedOn,
+              reportedOn: testInfo.reportedOn || null, // Explicitly set to null if not present
               enteredBy: testInfo.enteredBy,
               type: testDataInfo,
             }
           }
         }
         const finalBloodtestData = hideInvisible({ ...mappedPatientData, bloodtest: bloodtestFromDetail })
+        console.log("Final bloodtest data after hideInvisible:", finalBloodtestData)
         setPatientData({ ...mappedPatientData, bloodtest: finalBloodtestData })
         // Fetch historical registrations for the same patient using patientdetial.id
         const { data: historicalRegistrations, error: historicalError } = await supabase
@@ -334,7 +344,15 @@ function DownloadReport() {
   const updateReportedOnTime = (testKey: string) => {
     const test = patientData?.bloodtest_detail?.[testKey]
     if (!test) return
-    const currentTime = test.reportedOn ? toLocalDateTimeString(test.reportedOn) : toLocalDateTimeString()
+    
+    console.log(`Updating time for test ${testKey}:`, {
+      testData: test,
+      reportedOn: test.reportedOn,
+      bloodtestDetail: patientData?.bloodtest_detail?.[testKey],
+      bloodtestData: patientData?.bloodtest?.[testKey]
+    })
+    
+    const currentTime = test.reportedOn && test.reportedOn !== null ? toLocalDateTimeString(test.reportedOn) : toLocalDateTimeString()
     setUpdateTimeModal({
       isOpen: true,
       testKey,
@@ -504,6 +522,12 @@ function DownloadReport() {
     if (!patientData) return
     setIsSending(true)
     try {
+      console.log("Sending data to PDF generator:", {
+        patientData: patientData,
+        bloodtest: patientData.bloodtest,
+        selectedTests: selectedTests
+      })
+      
       const blob = await generateReportPdf(
         patientData,
         selectedTests,
@@ -594,7 +618,7 @@ function DownloadReport() {
         imageUrl: url,
         caption: `Dear ${patientData.name},\n\nYour blood test report is now available:\n${url}\n\nRegards,\nYour Lab Team`,
       }
-      const res = await fetch("https://a.infispark.in/send-image-url", {
+      const res = await fetch("https://wa.medblisss.com/send-image-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -921,24 +945,32 @@ function DownloadReport() {
           {!isComparisonMode && (
             <div className="bg-white rounded-xl shadow-lg p-8 space-y-4">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Select Tests to Include</h2>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {patientData.bloodtest &&
-                  Object.entries(patientData.bloodtest).map(([testKey, testData]) => (
-                    <label key={testKey} className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        className="form-checkbox h-5 w-5 text-indigo-600 rounded"
-                        checked={selectedTests.includes(testKey)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedTests([...selectedTests, testKey])
-                          } else {
-                            setSelectedTests(selectedTests.filter((key) => key !== testKey))
-                          }
-                        }}
-                      />
-                      <span className="text-gray-700">{testKey.replace(/_/g, " ")}</span>
-                      {testData.reportedOn && (
+                  Object.entries(patientData.bloodtest).map(([testKey, testData]) => {
+                    console.log(`Displaying test ${testKey}:`, {
+                      testData: testData,
+                      reportedOn: testData.reportedOn,
+                      bloodtestDetail: patientData?.bloodtest_detail?.[testKey]
+                    })
+                    return (
+                    <div key={testKey} className="border rounded-lg p-3 bg-gray-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="flex items-center space-x-3">
+                          <input
+                            type="checkbox"
+                            className="form-checkbox h-5 w-5 text-indigo-600 rounded"
+                            checked={selectedTests.includes(testKey)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedTests([...selectedTests, testKey])
+                              } else {
+                                setSelectedTests(selectedTests.filter((key) => key !== testKey))
+                              }
+                            }}
+                          />
+                          <span className="text-gray-700 font-medium">{testKey.replace(/_/g, " ")}</span>
+                        </label>
                         <button
                           onClick={() => updateReportedOnTime(testKey)}
                           className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
@@ -959,9 +991,23 @@ function DownloadReport() {
                           </svg>
                           Update Time
                         </button>
-                      )}
-                    </label>
-                  ))}
+                      </div>
+                      <div className="ml-8 text-sm text-gray-600">
+                        <span className="font-medium">Reported On:</span>{" "}
+                        {testData.reportedOn && testData.reportedOn !== null ? (
+                          <span>
+                            {format12Hour(testData.reportedOn)}
+                            <span className="text-xs text-gray-400 ml-2">
+                              (Raw: {testData.reportedOn})
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-orange-600 italic">Not set</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
