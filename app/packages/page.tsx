@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useForm } from 'react-hook-form'
 
 interface TestPackage {
+  discountamount: number
   id: number
   package_name: string
   discount: number
