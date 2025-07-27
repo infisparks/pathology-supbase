@@ -29,7 +29,7 @@ import type {
 const loadImageAsCompressedJPEG = async (url: string, quality = 0.5) => {
   const res = await fetch(url)
   const blob = await res.blob()
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<{ dataUrl: string; width: number; height: number }>((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
       const c = document.createElement("canvas")
@@ -38,7 +38,11 @@ const loadImageAsCompressedJPEG = async (url: string, quality = 0.5) => {
       const ctx = c.getContext("2d")
       if (!ctx) return reject(new Error("canvas"))
       ctx.drawImage(img, 0, 0)
-      resolve(c.toDataURL("image/jpeg", quality))
+      resolve({
+        dataUrl: c.toDataURL("image/jpeg", quality),
+        width: img.width,
+        height: img.height
+      })
     }
     img.onerror = reject
     img.src = URL.createObjectURL(blob)
@@ -693,8 +697,8 @@ const renderAiSuggestionsPage = async (
   addStampsAndPrintedBy: (doc: jsPDF, w: number, h: number, left: number, enteredBy: string) => Promise<void>,
   ensureSpace: (y: number, minHeightNeeded: number, reportedOnRaw?: string) => Promise<number>,
   printedBy: string,
-  dietImage: string, // Loaded image data
-  exerciseImage: string, // Loaded image data
+  dietImage: string, // Loaded image data URL
+  exerciseImage: string, // Loaded image data URL
 ) => {
   const totalW = w - 2 * left
   let currentY = headerY(patientData.createdAt) // Start below the header
@@ -899,13 +903,27 @@ export const generateReportPdf = async (
     ])
 
   const addStampsAndPrintedBy = async (doc: jsPDF, w: number, h: number, left: number, enteredBy: string) => {
-    const sy = h - STAMP_HEIGHT - STAMP_BOTTOM_MARGIN
+    // Calculate stamp dimensions maintaining aspect ratio
+    const stampAspectRatio = loadedStamp ? loadedStamp.width / loadedStamp.height : 1.33
+    const stamp2AspectRatio = loadedStamp2 ? loadedStamp2.width / loadedStamp2.height : 1.0
+    
+    const stampHeight = STAMP_WIDTH / stampAspectRatio
+    const stamp2Height = STAMP_WIDTH / stamp2AspectRatio
+    
+    // Position stamps from bottom, maintaining their individual heights
+    const sy2 = h - stamp2Height - STAMP_BOTTOM_MARGIN
+    const sy1 = h - stampHeight - STAMP_BOTTOM_MARGIN
+    
     const sx2 = w - left - STAMP_WIDTH
-    if (loadedStamp2) doc.addImage(loadedStamp2, "JPEG", sx2, sy, STAMP_WIDTH, STAMP_HEIGHT)
+    if (loadedStamp2) doc.addImage(loadedStamp2.dataUrl, "JPEG", sx2, sy2, STAMP_WIDTH, stamp2Height)
+    
     const sx1 = (w - STAMP_WIDTH) / 2
-    if (loadedStamp) doc.addImage(loadedStamp, "JPEG", sx1, sy, STAMP_WIDTH, STAMP_HEIGHT)
+    if (loadedStamp) doc.addImage(loadedStamp.dataUrl, "JPEG", sx1, sy1, STAMP_WIDTH, stampHeight)
+    
+    // Position "Printed by" text below the taller stamp
+    const maxStampHeight = Math.max(stampHeight, stamp2Height)
     doc.setFont("helvetica", "normal").setFontSize(10)
-    doc.text(`Printed by ${enteredBy}`, left, sy + STAMP_HEIGHT - 1)
+    doc.text(`Printed by ${enteredBy}`, left, h - maxStampHeight - STAMP_BOTTOM_MARGIN + maxStampHeight - 1)
   }
 
   const headerY = (reportedOnRaw?: string) => {
@@ -982,7 +1000,7 @@ export const generateReportPdf = async (
   const addNewPageWithHeader = async (reportedOnRaw?: string) => {
     doc.addPage()
     if (loadedLetterhead) {
-      doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
+      doc.addImage(loadedLetterhead.dataUrl, "JPEG", 0, 0, w, h)
     }
     const y = headerY(reportedOnRaw)
     await addStampsAndPrintedBy(doc, w, h, left, printedBy)
@@ -1343,7 +1361,7 @@ export const generateReportPdf = async (
   // 1. Cover Page (if not skipped)
   if (!skipCover) {
     if (loadedFirstPage) {
-      doc.addImage(loadedFirstPage, "JPEG", 0, 0, w, h)
+      doc.addImage(loadedFirstPage.dataUrl, "JPEG", 0, 0, w, h)
     }
   }
 
@@ -1351,7 +1369,7 @@ export const generateReportPdf = async (
   if (includeAiSuggestionsPage && aiSuggestions) {
     doc.addPage() // Add page for AI suggestions (this will be page 2 if cover exists, page 1 otherwise)
     if (loadedLetterhead) {
-      doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
+      doc.addImage(loadedLetterhead.dataUrl, "JPEG", 0, 0, w, h)
     }
     // Add header and stamps for the AI suggestions page
     const aiPageY = headerY(data.createdAt)
@@ -1368,8 +1386,8 @@ export const generateReportPdf = async (
       addStampsAndPrintedBy, // Passed for reference
       ensureSpace,
       printedBy, // Passed for reference
-      loadedDietImage!,
-      loadedExerciseImage!,
+      loadedDietImage!.dataUrl,
+      loadedExerciseImage!.dataUrl,
     )
   }
 
@@ -1395,13 +1413,13 @@ let isFirstReportPage = doc.getNumberOfPages() === 1
 if (!isFirstReportPage) {
   doc.addPage()
   if (loadedLetterhead) {
-    doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
+    doc.addImage(loadedLetterhead.dataUrl, "JPEG", 0, 0, w, h)
   }
   currentY = headerY(firstTestReportedOn)
   await addStampsAndPrintedBy(doc, w, h, left, printedBy)
 } else {
   if (loadedLetterhead) {
-    doc.addImage(loadedLetterhead, "JPEG", 0, 0, w, h)
+    doc.addImage(loadedLetterhead.dataUrl, "JPEG", 0, 0, w, h)
   }
   currentY = headerY(firstTestReportedOn)
   await addStampsAndPrintedBy(doc, w, h, left, printedBy)

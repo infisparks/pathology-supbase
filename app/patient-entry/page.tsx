@@ -107,6 +107,7 @@ interface IFormInput {
   existingPatientId?: number
   tpa: boolean // true = TPA, false = Normal
   selectedPackageId?: string // <-- add this
+  sendWhatsApp: boolean // <-- add this for WhatsApp SMS control
 }
 
 interface PackageType {
@@ -175,6 +176,7 @@ export default function PatientEntryForm() {
       existingPatientId: undefined,
       tpa: false, // Default to Normal
       selectedPackageId: '', // <-- add this
+      sendWhatsApp: true, // <-- add this, default to true
     },
   })
 
@@ -399,34 +401,40 @@ export default function PatientEntryForm() {
       const remainingAmountFormatted = remainingAmount.toFixed(2)
       const bloodTestNames = data.bloodTests.map((test) => test.testName).join(", ") || "No blood tests booked."
 
-      const whatsappMessage = `Dear *${patientName}*,\n\nWe have received your request for:${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
+      // Send WhatsApp message only if sendWhatsApp is true
+      if (data.sendWhatsApp) {
+        const whatsappCaption = `Dear *${patientName}*,\n\nWe have received your request for: *${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
 
-      const whatsappPayload = {
-        token: "99583991573",
-        number: `91${patientContact}`,
-        message: whatsappMessage,
-      }
-
-      try {
-        const whatsappResponse = await fetch("https://a.infispark.in/send-text", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(whatsappPayload),
-        })
-        const whatsappResult = await whatsappResponse.json()
-        if (whatsappResponse.ok) {
-          console.log("WhatsApp message sent successfully:", whatsappResult)
-        } else {
-          console.error("Failed to send WhatsApp message:", whatsappResult)
-          // Optionally, alert the user about WhatsApp message failure, but allow form submission to complete
-          // alert("Failed to send WhatsApp confirmation message.");
+        const whatsappPayload = {
+          token: "99583991573",
+          number: `91${patientContact}`,
+          imageUrl: "https://github.com/infisparks/images/blob/main/medfordlabappoinmentconfirm.png?raw=true",
+          caption: whatsappCaption,
         }
-      } catch (whatsappError) {
-        console.error("Error sending WhatsApp message:", whatsappError)
-        // Optionally, alert the user about WhatsApp message error, but allow form submission to complete
-        // alert("Error sending WhatsApp confirmation message.");
+
+        try {
+          const whatsappResponse = await fetch("https://a.infispark.in/send-image-url", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(whatsappPayload),
+          })
+          const whatsappResult = await whatsappResponse.json()
+          if (whatsappResponse.ok) {
+            console.log("WhatsApp message sent successfully:", whatsappResult)
+          } else {
+            console.error("Failed to send WhatsApp message:", whatsappResult)
+            // Optionally, alert the user about WhatsApp message failure, but allow form submission to complete
+            // alert("Failed to send WhatsApp confirmation message.");
+          }
+        } catch (whatsappError) {
+          console.error("Error sending WhatsApp message:", whatsappError)
+          // Optionally, alert the user about WhatsApp message error, but allow form submission to complete
+          // alert("Error sending WhatsApp confirmation message.");
+        }
+      } else {
+        console.log("WhatsApp message skipped as per user preference")
       }
 
       const message = data.existingPatientId
@@ -462,6 +470,7 @@ export default function PatientEntryForm() {
     existingPatientId: undefined,
     tpa: false, // Default to Normal
     selectedPackageId: '', // Default to empty
+    sendWhatsApp: true, // Default to true
   })
 
   /** ------------------------------
@@ -747,6 +756,19 @@ export default function PatientEntryForm() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                  
+                  {/* WhatsApp SMS Control */}
+                  <div className="mt-3 flex items-center gap-2">
+                    <Checkbox
+                      checked={watch("sendWhatsApp")}
+                      onCheckedChange={v => setValue("sendWhatsApp", !!v)}
+                      id="whatsapp-checkbox"
+                    />
+                    <Label htmlFor="whatsapp-checkbox" className="text-sm cursor-pointer flex items-center gap-2">
+                      <span className="text-green-600">📱</span>
+                      Send WhatsApp SMS
+                    </Label>
                   </div>
                 </div>
 
