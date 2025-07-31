@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { 
-  Home, UserPlus, Users, FlaskConical, Package, Settings, LogOut, Stethoscope 
+  Home, UserPlus, Users, FlaskConical, Package, Settings, LogOut, Stethoscope, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { signOut } from '@/lib/auth'
@@ -27,7 +27,7 @@ export default function Sidebar() {
   const { role, loading, error } = useUserRole()
   const pathname = usePathname()
   const router = useRouter()
-
+  const [isCollapsed, setIsCollapsed] = useState(true)
   const [email, setEmail] = useState<string | null>(null)
 
   useEffect(() => {
@@ -49,7 +49,10 @@ export default function Sidebar() {
 
   if (loading) {
     return (
-      <div className="h-screen w-64 bg-white flex items-center justify-center">
+      <div className={cn(
+        "h-screen bg-white flex items-center justify-center transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64"
+      )}>
         <span className="text-gray-500 animate-pulse">Loading menu...</span>
       </div>
     )
@@ -57,7 +60,10 @@ export default function Sidebar() {
 
   if (!role) {
     return (
-      <div className="h-screen w-64 bg-white flex flex-col items-center justify-center">
+      <div className={cn(
+        "h-screen bg-white flex flex-col items-center justify-center transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64"
+      )}>
         <div className="text-red-500 text-center mb-4">
           <p className="font-semibold">{error || 'Role not found'}</p>
           <p className="text-gray-600 text-sm mt-2">
@@ -88,20 +94,44 @@ export default function Sidebar() {
   }
 
   return (
-    <div className="h-screen w-64 bg-white shadow-lg flex flex-col">
+    <div className={cn(
+      "h-screen bg-white shadow-lg flex flex-col transition-all duration-300",
+      isCollapsed ? "w-16" : "w-64"
+    )}>
       {/* Header */}
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Stethoscope className="w-6 h-6 text-white" />
-          </div>
-          <div className="flex-1">
-            <h1 className="font-bold text-lg text-gray-900">INFICARE</h1>
-            <p className="text-xs text-gray-500">Pathology System</p>
-            {email && (
-              <p className="mt-1 text-xs text-gray-600 truncate">{email}</p>
+      <div className="p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          {!isCollapsed && (
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Stethoscope className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h1 className="font-bold text-lg text-gray-900">INFICARE</h1>
+                <p className="text-xs text-gray-500">Pathology System</p>
+                {email && (
+                  <p className="mt-1 text-xs text-gray-600 truncate">{email}</p>
+                )}
+              </div>
+            </div>
+          )}
+          {isCollapsed && (
+            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center mx-auto">
+              <Stethoscope className="w-6 h-6 text-white" />
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 hover:bg-gray-100"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+          >
+            {isCollapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
             )}
-          </div>
+          </Button>
         </div>
       </div>
 
@@ -124,9 +154,10 @@ export default function Sidebar() {
                         ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
                         : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                     )}
+                    title={isCollapsed ? item.label : undefined}
                   >
-                    <Icon className="w-5 h-5" />
-                    <span>{item.label}</span>
+                    <Icon className="w-5 h-5 flex-shrink-0" />
+                    {!isCollapsed && <span>{item.label}</span>}
                   </Link>
                 </li>
               )
@@ -138,11 +169,15 @@ export default function Sidebar() {
       <div className="p-4 border-t border-gray-200">
         <Button
           variant="ghost"
-          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+          className={cn(
+            "w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50",
+            isCollapsed && "justify-center"
+          )}
           onClick={handleSignOut}
+          title={isCollapsed ? "Sign Out" : undefined}
         >
-          <LogOut className="w-5 h-5 mr-3" />
-          Sign Out
+          <LogOut className="w-5 h-5 flex-shrink-0" />
+          {!isCollapsed && <span className="ml-3">Sign Out</span>}
         </Button>
       </div>
     </div>
