@@ -157,6 +157,7 @@ const BloodValuesForm: React.FC = () => {
     gender: string
     patientId: string
     name: string
+    day_type: string
   } | null>(null)
 
   const {
@@ -204,7 +205,7 @@ const BloodValuesForm: React.FC = () => {
 
         const { data: patientData, error: patientError } = await supabase
           .from("patientdetial")
-          .select("id, age, gender, patient_id, name")
+          .select("id, age, gender, patient_id, name, day_type")
           .eq("id", patientId)
           .single()
         if (patientError || !patientData) {
@@ -219,10 +220,15 @@ const BloodValuesForm: React.FC = () => {
           gender: patientData.gender,
           patientId: patientData.patient_id,
           name: patientData.name,
+          day_type: patientData.day_type,
         })
 
-        const ageDays = patientData.age * 365
+        // Calculate age in days based on day_type
+        const ageDays = patientData.day_type?.toLowerCase() === "day" ? patientData.age : patientData.age * 365
         const genderKey = patientData.gender?.toLowerCase() === "male" ? "male" : "female"
+        
+        // Debug logging for age calculation
+        console.log(`Patient age: ${patientData.age} ${patientData.day_type}, calculated age in days: ${ageDays}`)
 
         const tests: TestValueEntry[] = await Promise.all(
           bookedTests.map(async (bt: any) => {
@@ -256,8 +262,10 @@ const BloodValuesForm: React.FC = () => {
               let normal = ""
               for (const r of ranges) {
                 const { lower, upper } = parseRangeKey(r.rangeKey)
+                console.log(`Checking range ${r.rangeKey}: ${lower}-${upper} days, patient age: ${ageDays} days`)
                 if (ageDays >= lower && ageDays <= upper) {
                   normal = r.rangeValue
+                  console.log(`Selected range: ${r.rangeKey} with value: ${r.rangeValue}`)
                   break
                 }
               }
@@ -277,8 +285,10 @@ const BloodValuesForm: React.FC = () => {
                   let sNorm = ""
                   for (const x of sr) {
                     const { lower, upper } = parseRangeKey(x.rangeKey)
+                    console.log(`Checking subparameter range ${x.rangeKey}: ${lower}-${upper} days, patient age: ${ageDays} days`)
                     if (ageDays >= lower && ageDays <= upper) {
                       sNorm = x.rangeValue
+                      console.log(`Selected subparameter range: ${x.rangeKey} with value: ${x.rangeValue}`)
                       break
                     }
                   }
