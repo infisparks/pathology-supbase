@@ -133,7 +133,7 @@ function DownloadReport() {
             `
           *,
           patientdetial (
-            id, name, age, gender, patient_id, number, total_day, title
+            id, name, age, gender, patient_id, number, total_day, title, day_type
           )
         `,
           )
@@ -177,6 +177,7 @@ function DownloadReport() {
           patientId: patientdetial.patient_id,
           contact: patientdetial.number,
           total_day: patientdetial.total_day,
+          day_type: patientdetial.day_type,
           title: patientdetial.title,
           hospitalName: registrationData.hospital_name,
           registration_id: registrationData.id,

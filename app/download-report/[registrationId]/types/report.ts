@@ -48,6 +48,7 @@ export interface AgeRangeItem {
     patientId: string
     contact: string
     total_day?: string | number
+    day_type?: "year" | "month" | "day"
     title?: string
     doctorName?: string
     hospitalName?: string

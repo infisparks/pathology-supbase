@@ -622,7 +622,7 @@ export const generateAiSuggestions = async (
   }
 
   const prompt = `Generate short, professional, and actionable diet and exercise recommendations for a patient based on their blood test report.
-The patient's details are: Name: ${patientData.name}, Age: ${patientData.age} ${patientData.total_day ? "Days" : "Years"}, Gender: ${patientData.gender}.
+The patient's details are: Name: ${patientData.name}, Age: ${patientData.age} ${patientData.day_type === "day" ? "Days" : patientData.day_type === "month" ? "Months" : "Years"}, Gender: ${patientData.gender}.
 Here are the relevant blood test results:\n${bloodTestSummary}
 
 Provide the response as JSON with this structure:
@@ -942,7 +942,7 @@ export const generateReportPdf = async (
       },
       {
         label: "Age/Sex",
-        value: `${data.age} ${data.total_day ? "Days" : "Years"} / ${data.gender}`,
+        value: `${data.age} ${data.day_type === "day" ? "Days" : data.day_type === "month" ? "Months" : "Years"} / ${data.gender}`,
       },
       {
         label: "Ref Doctor",
