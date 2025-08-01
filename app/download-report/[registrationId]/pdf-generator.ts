@@ -917,8 +917,8 @@ export const generateReportPdf = async (
     const sx2 = w - left - STAMP_WIDTH
     if (loadedStamp2) doc.addImage(loadedStamp2.dataUrl, "JPEG", sx2, sy2, STAMP_WIDTH, stamp2Height)
     
-    const sx1 = (w - STAMP_WIDTH) / 2
-    if (loadedStamp) doc.addImage(loadedStamp.dataUrl, "JPEG", sx1, sy1, STAMP_WIDTH, stampHeight)
+    // const sx1 = (w - STAMP_WIDTH) / 2
+    // if (loadedStamp) doc.addImage(loadedStamp.dataUrl, "JPEG", sx1, sy1, STAMP_WIDTH, stampHeight)
     
     // Position "Printed by" text below the taller stamp
     const maxStampHeight = Math.max(stampHeight, stamp2Height)
@@ -1084,7 +1084,6 @@ export const generateReportPdf = async (
     }
 
     y += estimatedRowHeight
-
     if (p.subparameters?.length) {
       for (const sp of p.subparameters) {
         y = await printRow(sp, y, reportedOnRaw, indent + 2)

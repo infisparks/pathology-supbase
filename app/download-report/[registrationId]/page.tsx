@@ -715,10 +715,13 @@ function DownloadReport() {
                 </div>
                 <div>
                   <span className="font-medium">Age/Gender:</span> {patientData.age}{" "}
-                  {patientData.total_day ? "Days" : "Years"} / {patientData.gender}
+                  {patientData.total_day ? "Years" : "Days"} / {patientData.gender}
                 </div>
                 <div>
-                  <span className="font-medium">Contact:</span> {patientData.contact}
+                  <span className="font-medium">Contact:</span>{" "}
+                  {patientData.contact
+                    ? patientData.contact
+                    : <span className="text-gray-400 italic">Not provided</span>}
                 </div>
               </div>
             </div>
