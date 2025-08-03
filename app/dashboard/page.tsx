@@ -112,61 +112,95 @@ export default function Dashboard() {
     try {
       const today = new Date().toISOString().split("T")[0]
 
-      const { count: totalRegistrationsCount, error: totalRegistrationsError } = await supabase
+      // Fetch all registrations to calculate totals and pending reports accurately
+      const { data: allRegistrationsData, error: allRegistrationsError } = await supabase
         .from("registration")
-        .select("*", { count: "exact", head: true })
-      if (totalRegistrationsError) throw totalRegistrationsError
+        .select(
+          `
+        id, registration_time, amount_paid, amount_paid_history, samplecollected_time, bloodtest_data,
+        patientdetial (
+          id, name, patient_id, age, gender, number, address, day_type, total_day, title
+        )
+      `
+        )
+      if (allRegistrationsError) throw allRegistrationsError
 
-      const { count: todayRegistrationsCount, error: todayRegistrationsError } = await supabase
-        .from("registration")
-        .select("*", { count: "exact", head: true })
-        .gte("registration_time", today)
-      if (todayRegistrationsError) throw todayRegistrationsError
+      let todayRegistrationsCount = 0;
+      let todayRevenue = 0;
+      let todayPendingReportsCount = 0; // Reports from today where samples are collected but tests aren't complete
+      let totalCompletedTestsCount = 0; // Total tests fully entered (across all dates)
 
-      const { data: registrationsData, error: registrationsError } = await supabase
-        .from("registration")
-        .select("amount_paid, amount_paid_history, registration_time, samplecollected_time, bloodtest_data")
-      if (registrationsError) throw registrationsError
+      if (allRegistrationsData) {
+        const mappedRegistrations: Registration[] = allRegistrationsData.map((registrationRow: any) => {
+          const patientDetail = registrationRow.patientdetial || {}
+          return {
+            id: registrationRow.id,
+            registration_id: registrationRow.id,
+            visitType: registrationRow.visit_type || "",
+            createdAt: registrationRow.registration_time || registrationRow.created_at,
+            discountAmount: registrationRow.discount_amount || 0,
+            amountPaid: registrationRow.amount_paid || 0,
+            doctor_name: registrationRow.doctor_name,
+            bloodTests: registrationRow.bloodtest_data || [],
+            bloodtest: registrationRow.bloodtest_detail || {},
+            sampleCollectedAt: registrationRow.samplecollected_time,
+            paymentHistory: registrationRow.amount_paid_history || null,
+            hospitalName: registrationRow.hospital_name,
+            patient_id: patientDetail.patient_id || "", // Ensure patient_id from patientdetial is used
+            name: patientDetail.name || "Unknown",
+            patientId: patientDetail.patient_id || "",
+            age: patientDetail.age || 0,
+            gender: patientDetail.gender,
+            contact: patientDetail.number,
+            address: patientDetail.address,
+            day_type: patientDetail.day_type,
+            total_day: patientDetail.total_day,
+            title: patientDetail.title,
+            tpa: registrationRow.tpa === true,
+          }
+        });
 
-      let totalRevenue = 0
-      let todayRevenue = 0
-      let pendingTestsCount = 0
-      let completedTestsCount = 0
 
-      if (registrationsData) {
-        registrationsData.forEach((reg) => {
+        mappedRegistrations.forEach((reg) => {
+          // Check if registration is from today
+          const isTodayRegistration = reg.createdAt?.startsWith(today);
+
           let regRevenue = 0
           if (
-            reg.amount_paid_history &&
-            typeof reg.amount_paid_history === "object" &&
-            "paymentHistory" in reg.amount_paid_history
+            reg.paymentHistory &&
+            typeof reg.paymentHistory === "object" &&
+            "paymentHistory" in reg.paymentHistory
           ) {
-            const paymentData = reg.amount_paid_history as PaymentHistory
+            const paymentData = reg.paymentHistory as PaymentHistory
             regRevenue = paymentData.paymentHistory?.reduce((sum, payment) => sum + payment.amount, 0) || 0
           } else {
-            regRevenue = reg.amount_paid || 0
+            regRevenue = reg.amountPaid || 0
           }
 
-          totalRevenue += regRevenue
-          if (reg.registration_time?.startsWith(today)) {
-            todayRevenue += regRevenue
+          if (isTodayRegistration) {
+            todayRegistrationsCount++;
+            todayRevenue += regRevenue;
           }
 
-          if (reg.samplecollected_time) {
-            completedTestsCount++
-          } else {
-            pendingTestsCount++
+          // Logic for Today's Pending Reports: Sample Collected AND Tests NOT Complete AND is Today's Registration
+          if (isTodayRegistration && reg.sampleCollectedAt && !isAllTestsComplete(reg)) {
+            todayPendingReportsCount++;
+          }
+
+          // Total Completed Tests (across all dates)
+          if (reg.sampleCollectedAt && isAllTestsComplete(reg)) {
+            totalCompletedTestsCount++;
           }
         })
       }
 
       setMetrics({
-        totalRegistrations: totalRegistrationsCount || 0,
-        todayRegistrations: todayRegistrationsCount || 0,
-        totalRevenue,
-        todayRevenue,
-        pendingReports: pendingTestsCount,
-        completedTests: completedTestsCount,
+        totalRegistrations: todayRegistrationsCount, // Display today's registrations by default
+        todayRegistrations: todayRegistrationsCount,
+        totalRevenue: todayRevenue, // Display today's revenue by default
+        todayRevenue: todayRevenue,
+        pendingReports: todayPendingReportsCount, // Correctly calculated today's pending reports
+        completedTests: totalCompletedTestsCount, // Renamed for clarity (previously pendingTests was used for samples not collected)
       })
     } catch (error: any) {
       console.error("Dashboard: Error fetching dashboard stats:", error.message)
@@ -181,12 +215,12 @@ export default function Dashboard() {
         .from("registration")
         .select(
           `
-        *,
-        tpa,
-        patientdetial (
-          id, name, patient_id, age, gender, number, address, day_type, total_day, title
-        )
-      `,
+          *,
+          tpa,
+          patientdetial (
+            id, name, patient_id, age, gender, number, address, day_type, total_day, title
+          )
+        `,
         )
         .order("registration_time", { ascending: false })
 
@@ -211,7 +245,7 @@ export default function Dashboard() {
           sampleCollectedAt: registrationRow.samplecollected_time,
           paymentHistory: registrationRow.amount_paid_history || null,
           hospitalName: registrationRow.hospital_name,
-          patient_id: registrationRow.patient_id,
+          patient_id: patientDetail.patient_id || "", // Ensure patient_id from patientdetial is used
           name: patientDetail.name || "Unknown",
           patientId: patientDetail.patient_id || "",
           age: patientDetail.age || 0,
@@ -278,10 +312,10 @@ export default function Dashboard() {
         .from("registration")
         .select(
           `*,
-        tpa,
-        patientdetial (
-          id, name, patient_id, age, gender, number, address, day_type, total_day, title
-        )`
+          tpa,
+          patientdetial (
+            id, name, patient_id, age, gender, number, address, day_type, total_day, title
+          )`
         )
         .or(`patientdetial.name.ilike.%${term}%,patientdetial.number.ilike.%${term}%`)
         .order("registration_time", { ascending: false })
@@ -306,7 +340,7 @@ export default function Dashboard() {
               sampleCollectedAt: registrationRow.samplecollected_time,
               paymentHistory: registrationRow.amount_paid_history || null,
               hospitalName: registrationRow.hospital_name,
-              patient_id: registrationRow.patient_id,
+              patient_id: patientDetail.patient_id || "", // Ensure patient_id from patientdetial is used
               name: patientDetail.name || "Unknown",
               patientId: patientDetail.patient_id || "",
               age: patientDetail.age || 0,
@@ -357,7 +391,7 @@ export default function Dashboard() {
         case "notCollected":
           if (sampleCollected) return false
           break
-        case "sampleCollected":
+        case "sampleCollected": // This means sample collected but tests not complete (Pending)
           if (!sampleCollected || complete) return false
           break
         case "completed":
