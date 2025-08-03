@@ -144,10 +144,16 @@ export const downloadBill = (selectedRegistration: Registration) => {
 
     let y = 70
 
-    const drawRow = (kL: string, vL: string, kR: string, vR: string) => {
+    // Adjusted drawRow to handle multi-line left value
+    const drawRow = (kL: string, vL: string | string[], kR: string, vR: string) => {
       doc.text(kL, leftKeyX, y)
       doc.text(":", leftColonX, y)
-      doc.text(vL, leftValueX, y)
+      if (Array.isArray(vL)) {
+        doc.text(vL, leftValueX, y)
+        y += (vL.length - 1) * 6; // Adjust y based on extra lines
+      } else {
+        doc.text(vL, leftValueX, y)
+      }
       doc.text(kR, rightKeyX, y)
       doc.text(":", rightColonX, y)
       doc.text(vR, rightValueX, y)
@@ -165,7 +171,11 @@ export const downloadBill = (selectedRegistration: Registration) => {
         ? "d"
         : "y"
 
-    drawRow("Name", fullName, "Patient ID", getMergedPatientId(selectedRegistration))
+    // Calculate max width for the name column before splitting
+    const nameColumnWidth = (pageW / 2 + margin) - leftValueX - 4;
+    const nameLines = doc.splitTextToSize(fullName, nameColumnWidth);
+
+    drawRow("Name", nameLines, "Patient ID", getMergedPatientId(selectedRegistration))
     drawRow(
       "Age / Gender",
       `${selectedRegistration.age}${unit} / ${selectedRegistration.gender}`,
@@ -292,10 +302,16 @@ export const downloadMultipleBills = (selectedRegistrations: number[], allRegist
 
         let y = 70
 
-        const drawRow = (kL: string, vL: string, kR: string, vR: string) => {
+        // Adjusted drawRow to handle multi-line left value
+        const drawRow = (kL: string, vL: string | string[], kR: string, vR: string) => {
           doc.text(kL, leftKeyX, y)
           doc.text(":", leftColonX, y)
-          doc.text(vL, leftValueX, y)
+          if (Array.isArray(vL)) {
+            doc.text(vL, leftValueX, y)
+            y += (vL.length - 1) * 6; // Adjust y based on extra lines
+          } else {
+            doc.text(vL, leftValueX, y)
+          }
           doc.text(kR, rightKeyX, y)
           doc.text(":", rightColonX, y)
           doc.text(vR, rightValueX, y)
@@ -313,7 +329,11 @@ export const downloadMultipleBills = (selectedRegistrations: number[], allRegist
             ? "d"
             : "y"
 
-        drawRow("Name", fullName, "Patient ID", getMergedPatientId(registration))
+        // Calculate max width for the name column before splitting
+        const nameColumnWidth = (pageW / 2 + margin) - leftValueX - 4;
+        const nameLines = doc.splitTextToSize(fullName, nameColumnWidth);
+
+        drawRow("Name", nameLines, "Patient ID", getMergedPatientId(registration))
         drawRow(
           "Age / Gender",
           `${registration.age}${unit} / ${registration.gender}`,
@@ -415,10 +435,15 @@ export const generateBillBlob = async (selectedRegistration: Registration): Prom
 
       let y = 70
 
-      const drawRow = (kL: string, vL: string, kR: string, vR: string) => {
+      const drawRow = (kL: string, vL: string | string[], kR: string, vR: string) => {
         doc.text(kL, leftKeyX, y)
         doc.text(":", leftColonX, y)
-        doc.text(vL, leftValueX, y)
+        if (Array.isArray(vL)) {
+          doc.text(vL, leftValueX, y)
+          y += (vL.length - 1) * 6; // Adjust y based on extra lines
+        } else {
+          doc.text(vL, leftValueX, y)
+        }
         doc.text(kR, rightKeyX, y)
         doc.text(":", rightColonX, y)
         doc.text(vR, rightValueX, y)
@@ -436,7 +461,11 @@ export const generateBillBlob = async (selectedRegistration: Registration): Prom
           ? "d"
           : "y"
 
-      drawRow("Name", fullName, "Patient ID", getMergedPatientId(selectedRegistration))
+      // Calculate max width for the name column before splitting
+      const nameColumnWidth = (pageW / 2 + margin) - leftValueX - 4;
+      const nameLines = doc.splitTextToSize(fullName, nameColumnWidth);
+
+      drawRow("Name", nameLines, "Patient ID", getMergedPatientId(selectedRegistration))
       drawRow(
         "Age / Gender",
         `${selectedRegistration.age}${unit} / ${selectedRegistration.gender}`,
