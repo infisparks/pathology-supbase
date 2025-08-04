@@ -1,34 +1,22 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
-
 import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
-
 import { supabase } from "@/lib/supabase"
-
 import { Card, CardContent } from "@/components/ui/card"
-
 import { Input } from "@/components/ui/input"
-
 import { Button } from "@/components/ui/button"
-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
 import { Label } from "@/components/ui/label"
-
 import { Textarea } from "@/components/ui/textarea"
-
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-
 import { UserCircle, Phone, Calendar, Clock, Plus, X, Search, Trash2 } from "lucide-react"
-
 import { Checkbox } from "@/components/ui/checkbox"
-
 import { generatePatientIdWithSequence } from "@/lib/patient_id_generator"
 
 /**
  * -----------------------------
- *   Helpers and constants
+ * Helpers and constants
  * -----------------------------
  */
 
@@ -54,7 +42,7 @@ function time12ToISO(date: string, time12: string) {
 
 /**
  * -----------------------------
- *   Types
+ * Types
  * -----------------------------
  */
 
@@ -131,7 +119,7 @@ interface PatientSuggestion {
 
 /**
  * -----------------------------
- *   Component
+ * Component
  * -----------------------------
  */
 
@@ -144,23 +132,16 @@ export default function PatientEntryForm() {
     const mer = initialDate.getHours() >= 12 ? "PM" : "AM"
     return `${String(h12).padStart(2, "0")}:${String(initialDate.getMinutes()).padStart(2, "0")} ${mer}`
   }, [initialDate])
-
-  /** ---------------- form ---------------- */
-  const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    setValue,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<IFormInput>({
-    defaultValues: {
+  
+  // This function returns the default values object, which is now used in both useForm and the reset function.
+  const getDefaultFormValues = useMemo(
+    () => (): IFormInput => ({
       hospitalName: "MEDFORD HOSPITAL",
       visitType: "opd",
       title: "",
       name: "",
       contact: "",
+      age: 0, // <-- Added missing 'age' property
       dayType: "year",
       gender: "",
       address: "",
@@ -174,10 +155,24 @@ export default function PatientEntryForm() {
       discountAmount: 0,
       paymentEntries: [],
       existingPatientId: undefined,
-      tpa: false, // Default to Normal
-      selectedPackageId: '', // <-- add this
-      sendWhatsApp: true, // <-- add this, default to true
-    },
+      tpa: false,
+      selectedPackageId: "",
+      sendWhatsApp: true,
+    }),
+    [defaultDate, defaultTime],
+  )
+
+  /** ---------------- form ---------------- */
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    setValue,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<IFormInput>({
+    defaultValues: getDefaultFormValues(),
   })
 
   /** local state */
@@ -209,7 +204,7 @@ export default function PatientEntryForm() {
     name: "paymentEntries",
   })
 
-  /** fetch look‑ups */
+  /** fetch look-ups */
   useEffect(() => {
     ;(async () => {
       const { data, error } = await supabase.from(TABLE.DOCTOR).select("id, doctor_name").order("doctor_name")
@@ -231,7 +226,7 @@ export default function PatientEntryForm() {
     })()
   }, [])
 
-  /** auto‑select gender by title */
+  /** auto-select gender by title */
   const titleValue = watch("title")
   useEffect(() => {
     const male = new Set(["MR", "MAST", "BABA"])
@@ -327,13 +322,14 @@ export default function PatientEntryForm() {
   /** submit */
   const onSubmit: SubmitHandler<IFormInput> = async (data) => {
     if (data.bloodTests.length === 0) {
+      // In a real application, consider a modal or toast for this, not an alert.
       alert("Please add at least one blood test before submitting.")
       return
     }
     try {
       let patientDatabaseId: number
       if (data.existingPatientId) {
-        // Use existing patient - no need to create new patient record
+        // Use existing patient
         patientDatabaseId = data.existingPatientId
         console.log("Using existing patient with ID:", patientDatabaseId)
       } else {
@@ -363,39 +359,36 @@ export default function PatientEntryForm() {
 
       /* REGISTRATION ROW with new payment structure */
       const isoTime = time12ToISO(data.registrationDate, data.registrationTime)
-      // Create the global payment structure - ONLY save to amount_paid_history
       const paymentHistoryData: PaymentHistory = {
         totalAmount: totalAmount,
         discount: discountAmount,
         paymentHistory: data.paymentEntries.length > 0 ? data.paymentEntries : [],
       }
-      // Calculate total amount paid for legacy fields
       const totalAmountPaid = data.paymentEntries.reduce((sum, entry) => sum + entry.amount, 0)
       const { data: regData, error: regErr } = await supabase
         .from(TABLE.REGISTRATION)
         .insert({
-          patient_id: patientDatabaseId, // Use the correct patient database ID
-          amount_paid: totalAmountPaid, // Legacy field - sum of all payments
+          patient_id: patientDatabaseId,
+          amount_paid: totalAmountPaid,
           visit_type: data.visitType,
           registration_time: isoTime,
           samplecollected_time: isoTime,
           discount_amount: discountAmount,
           hospital_name: data.hospitalName,
-          payment_mode: data.paymentEntries.length > 0 ? data.paymentEntries[0].paymentMode : "online", // Legacy field
+          payment_mode: data.paymentEntries.length > 0 ? data.paymentEntries[0].paymentMode : "online",
           bloodtest_data: data.bloodTests,
           amount_paid_history: paymentHistoryData,
-          doctor_name: data.doctorName, // ONLY save to this column
+          doctor_name: data.doctorName,
           tpa: data.tpa,
         })
         .select()
-        .single() // Select the inserted row to get its ID
+        .single()
       throwIfError(regErr)
-      const registrationId = regData.id // Get the ID of the newly created registration
+      const registrationId = regData.id
       const patientContact = data.contact
       const patientName = data.name
       const registrationDate = data.registrationDate
       const registrationTime = data.registrationTime
-      const doctorName = data.doctorName
       const totalAmountFormatted = totalAmount.toFixed(2)
       const totalPaidFormatted = totalPaid.toFixed(2)
       const remainingAmountFormatted = remainingAmount.toFixed(2)
@@ -408,12 +401,13 @@ export default function PatientEntryForm() {
         const whatsappPayload = {
           token: "99583991573",
           number: `91${patientContact}`,
-          imageUrl: "https://github.com/infisparks/images/blob/main/medfordlabappoinmentconfirm.png?raw=true",
-          caption: whatsappCaption,
+          // imageUrl: "https://github.com/infisparks/images/blob/main/medfordlabappoinmentconfirm.png?raw=true",
+          // caption: whatsappCaption,
+          message: whatsappCaption
         }
 
         try {
-          const whatsappResponse = await fetch("https://a.infispark.in/send-image-url", {
+          const whatsappResponse = await fetch("https://a.infispark.in/send-text", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -425,23 +419,21 @@ export default function PatientEntryForm() {
             console.log("WhatsApp message sent successfully:", whatsappResult)
           } else {
             console.error("Failed to send WhatsApp message:", whatsappResult)
-            // Optionally, alert the user about WhatsApp message failure, but allow form submission to complete
-            // alert("Failed to send WhatsApp confirmation message.");
           }
         } catch (whatsappError) {
           console.error("Error sending WhatsApp message:", whatsappError)
-          // Optionally, alert the user about WhatsApp message error, but allow form submission to complete
-          // alert("Error sending WhatsApp confirmation message.");
         }
       } else {
         console.log("WhatsApp message skipped as per user preference")
       }
 
+      // After all operations are successfully awaited, provide feedback and reset the form.
+      // This is crucial for ensuring the UI updates only after a confirmed submission.
       const message = data.existingPatientId
         ? "New registration added to existing patient successfully ✅"
         : "New patient and registration saved successfully ✅"
       alert(message)
-      reset({ ...defaultValues() })
+      reset(getDefaultFormValues())
       setIsExistingPatient(false)
     } catch (err: any) {
       console.error(err)
@@ -449,32 +441,8 @@ export default function PatientEntryForm() {
     }
   }
 
-  const defaultValues = (): Partial<IFormInput> => ({
-    hospitalName: "MEDFORD HOSPITAL",
-    visitType: "opd",
-    title: "",
-    name: "",
-    contact: "",
-    dayType: "year",
-    gender: "",
-    address: "",
-    email: "",
-    doctorName: "",
-    doctorId: null,
-    bloodTests: [],
-    patientId: "",
-    registrationDate: defaultDate,
-    registrationTime: defaultTime,
-    discountAmount: 0,
-    paymentEntries: [],
-    existingPatientId: undefined,
-    tpa: false, // Default to Normal
-    selectedPackageId: '', // Default to empty
-    sendWhatsApp: true, // Default to true
-  })
-
   /** ------------------------------
-   *   JSX
+   * JSX
    * ------------------------------ */
   return (
     <div className="flex h-screen bg-gray-50">
@@ -567,7 +535,7 @@ export default function PatientEntryForm() {
                               if (!isExistingPatient) {
                                 setShowPatientHints(true)
                                 setValue("name", e.target.value.toUpperCase())
-                                handleNewPatient() // Clear existing patient data when typing new name
+                                handleNewPatient()
                               }
                             },
                           })}
@@ -657,7 +625,7 @@ export default function PatientEntryForm() {
                         <SelectTrigger className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
                           <SelectValue placeholder="Select gender" />
                         </SelectTrigger>
-                        <SelectContent>
+                          <SelectContent>
                           <SelectItem value="Male">Male</SelectItem>
                           <SelectItem value="Female">Female</SelectItem>
                           <SelectItem value="Other">Other</SelectItem>
@@ -743,28 +711,32 @@ export default function PatientEntryForm() {
                         <div className="flex items-center gap-2">
                           <Checkbox
                             checked={!watch("tpa")}
-                            onCheckedChange={v => setValue("tpa", !v)}
+                            onCheckedChange={(v) => setValue("tpa", !v)}
                             id="normal-checkbox"
                           />
-                          <Label htmlFor="normal-checkbox" className="text-sm cursor-pointer">Normal</Label>
+                          <Label htmlFor="normal-checkbox" className="text-sm cursor-pointer">
+                            Normal
+                          </Label>
                         </div>
                         <div className="flex items-center gap-2">
                           <Checkbox
                             checked={watch("tpa")}
-                            onCheckedChange={v => setValue("tpa", !!v)}
+                            onCheckedChange={(v) => setValue("tpa", !!v)}
                             id="tpa-checkbox"
                           />
-                          <Label htmlFor="tpa-checkbox" className="text-sm cursor-pointer">TPA</Label>
+                          <Label htmlFor="tpa-checkbox" className="text-sm cursor-pointer">
+                            TPA
+                          </Label>
                         </div>
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* WhatsApp SMS Control */}
                   <div className="mt-3 flex items-center gap-2">
                     <Checkbox
                       checked={watch("sendWhatsApp")}
-                      onCheckedChange={v => setValue("sendWhatsApp", !!v)}
+                      onCheckedChange={(v) => setValue("sendWhatsApp", !!v)}
                       id="whatsapp-checkbox"
                     />
                     <Label htmlFor="whatsapp-checkbox" className="text-sm cursor-pointer flex items-center gap-2">
@@ -783,10 +755,10 @@ export default function PatientEntryForm() {
                       <div className="flex items-center mr-2">
                         <Label className="text-xs mr-1">Package</Label>
                         <Select
-                          value={watch('selectedPackageId') || 'none'}
+                          value={watch("selectedPackageId") || "none"}
                           onValueChange={async (pkgId) => {
-                            setValue('selectedPackageId', pkgId)
-                            if (!pkgId || pkgId === 'none') return
+                            setValue("selectedPackageId", pkgId)
+                            if (!pkgId || pkgId === "none") return
                             const pkg = packageRows.find((p) => String(p.id) === String(pkgId))
                             if (pkg) {
                               removeAllTests()
@@ -798,7 +770,7 @@ export default function PatientEntryForm() {
                                   testType: t.testType,
                                 })
                               })
-                              setValue('discountAmount', pkg.discountamount || 0)
+                              setValue("discountAmount", pkg.discountamount || 0)
                             }
                           }}
                         >
@@ -885,7 +857,10 @@ export default function PatientEntryForm() {
                                   type="number"
                                   {...register(`bloodTests.${idx}.price` as const, { valueAsNumber: true })}
                                   className="h-7 w-20"
-                                  disabled={((watch(`bloodTests.${idx}.testName` as const) || "").trim().toLowerCase() !== "histopathology")}
+                                  disabled={
+                                    (watch(`bloodTests.${idx}.testName` as const) || "").trim().toLowerCase() !==
+                                    "histopathology"
+                                  }
                                 />
                               </TableCell>
                               <TableCell className="py-1 px-2">
@@ -975,9 +950,7 @@ export default function PatientEntryForm() {
                                 <Label className="text-xs">Mode</Label>
                                 <Select
                                   value={watch(`paymentEntries.${idx}.paymentMode` as const)}
-                                  onValueChange={(v) =>
-                                    setValue(`paymentEntries.${idx}.paymentMode` as const, v as any)
-                                  }
+                                  onValueChange={(v) => setValue(`paymentEntries.${idx}.paymentMode` as const, v as any)}
                                 >
                                   <SelectTrigger className="h-8">
                                     <SelectValue />
@@ -1012,7 +985,9 @@ export default function PatientEntryForm() {
                       <div className="flex justify-between border-t pt-2">
                         <span className="font-semibold">Remaining Amount:</span>
                         <span
-                          className={`font-semibold ${remainingAmount < 0 ? "text-red-600" : remainingAmount > 0 ? "text-orange-600" : "text-green-600"}`}
+                          className={`font-semibold ${
+                            remainingAmount < 0 ? "text-red-600" : remainingAmount > 0 ? "text-orange-600" : "text-green-600"
+                          }`}
                         >
                           ₹{remainingAmount.toFixed(2)}
                         </span>

@@ -1,13 +1,7 @@
 "use client"
-
-import type React from "react"
-
 import { Suspense, useEffect, useState } from "react"
-
 import { useRouter, useParams } from "next/navigation"
-
 import { supabase } from "@/lib/supabase"
-
 import type {
     PatientData,
     BloodTestData,
@@ -15,13 +9,11 @@ import type {
     HistoricalTestEntry,
     ComparisonTestSelection,
 } from "./types/report"
-
 import { generateReportPdf, generateAiSuggestions } from "./pdf-generator" // Import the new PDF generator utility and AI generator
 
 // -----------------------------
 // Helper Functions (Specific to this component's UI logic)
 // -----------------------------
-
 const toLocalDateTimeString = (dateInput?: string | Date) => {
     const date = dateInput ? new Date(dateInput) : new Date()
     const offset = date.getTimezoneOffset()
@@ -71,7 +63,6 @@ const slugifyTestName = (name: string) =>
 // -----------------------------
 // Component
 // -----------------------------
-
 export default function DownloadReportPage() {
     return (
         <Suspense fallback={<div>Loading Report...</div>}>
@@ -84,6 +75,7 @@ function DownloadReport() {
     const router = useRouter()
     const params = useParams()
     const registrationId = params.registrationId as string
+
     const [patientData, setPatientData] = useState<PatientData | null>(null)
     const [isSending, setIsSending] = useState(false)
     const [selectedTests, setSelectedTests] = useState<string[]>([])
@@ -113,6 +105,7 @@ function DownloadReport() {
         isOpen: false,
         currentTime: "",
     })
+
     // New states for comparison report
     const [isComparisonMode, setIsComparisonMode] = useState(false)
     const [historicalTestsData, setHistoricalTestsData] = useState<Record<string, HistoricalTestEntry[]>>({}) // Map: testKey -> array of historical entries
@@ -126,7 +119,9 @@ function DownloadReport() {
             try {
                 setLoading(true)
                 setError(null)
+
                 console.log("Fetching registration data for ID:", registrationId)
+
                 // First, fetch current registration data with patient details
                 const { data: registrationData, error: registrationError } = await supabase
                     .from("registration")
@@ -140,13 +135,16 @@ function DownloadReport() {
                     )
                     .eq("id", registrationId)
                     .single()
+
                 if (registrationError) {
                     console.error("Registration fetch error:", registrationError)
                     throw new Error(`Failed to fetch registration: ${registrationError.message}`)
                 }
+
                 if (!registrationData) {
                     throw new Error("Registration not found")
                 }
+
                 console.log("Current Registration data fetched:", registrationData)
 
                 // Fetch interpretation data from blood_test table based on test_name
@@ -159,10 +157,10 @@ function DownloadReport() {
                         parsedBloodtestDataForNames = [];
                     }
                 }
+
                 // Use the original test names for the Supabase query
                 const originalTestNames = (parsedBloodtestDataForNames || []).map((t: any) => t.testName);
                 console.log("Extracted original test names from registration bloodtest_data:", originalTestNames);
-
 
                 const { data: bloodTests, error: bloodTestError } = await supabase
                     .from("blood_test")
@@ -173,8 +171,8 @@ function DownloadReport() {
                     console.error("Blood test interpretation fetch error:", bloodTestError);
                     throw new Error(`Failed to fetch blood tests: ${bloodTestError.message}`);
                 }
-                console.log("Fetched interpretations from blood_test table (with original names):", bloodTests);
 
+                console.log("Fetched interpretations from blood_test table (with original names):", bloodTests);
 
                 const testInterpretations: Record<string, string> = {};
                 bloodTests.forEach((test) => {
@@ -183,8 +181,8 @@ function DownloadReport() {
                     testInterpretations[slug] = test.interpretation || "";
                     console.log(`Mapped interpretation: ${test.test_name} (slug: ${slug}) -> ${test.interpretation}`);
                 });
-                console.log("Final mapped test interpretations (slugified keys):", testInterpretations);
 
+                console.log("Final mapped test interpretations (slugified keys):", testInterpretations);
 
                 let parsedBloodtestDetail = registrationData.bloodtest_detail
                 if (typeof parsedBloodtestDetail === "string") {
@@ -195,6 +193,7 @@ function DownloadReport() {
                         parsedBloodtestDetail = {}
                     }
                 }
+
                 let parsedBloodtestData = registrationData.bloodtest_data
                 if (typeof parsedBloodtestData === "string") {
                     try {
@@ -204,10 +203,12 @@ function DownloadReport() {
                         parsedBloodtestData = []
                     }
                 }
+
                 const patientdetial = registrationData.patientdetial as any
                 if (!patientdetial) {
                     throw new Error("Patient details not found")
                 }
+
                 const mappedPatientData: PatientData = {
                     id: patientdetial.id,
                     name: patientdetial.name,
@@ -226,6 +227,7 @@ function DownloadReport() {
                     bloodtest_detail: parsedBloodtestDetail || {},
                     doctorName: registrationData.doctor_name, // Add this line
                 }
+
                 const bloodtestFromDetail: Record<string, BloodTestData> = {}
                 if (parsedBloodtestDetail && typeof parsedBloodtestDetail === "object") {
                     // Create a lookup for original test names based on the detail keys
@@ -239,7 +241,7 @@ function DownloadReport() {
                         // This assumes your `bloodtest_detail` is populated with keys like `complete_blood_count_(cbc)`
                         // This is a hack for existing data, the ideal is `slugifyTestName` produces the same everywhere.
                         if (test.testName === "Complete Blood Count (CBC)") {
-                             detailKeyToOriginalTestName["complete_blood_count_(cbc)"] = test.testName;
+                            detailKeyToOriginalTestName["complete_blood_count_(cbc)"] = test.testName;
                         }
                     });
 
@@ -254,15 +256,13 @@ function DownloadReport() {
                         } else {
                             // Fallback if original test name lookup fails (e.g., if bloodtest_data is inconsistent)
                             // Try looking up directly with the detail key after basic slugification
-                             interpretationToAssign = testInterpretations[slugifyTestName(testKeyFromDetail.replace(/_/g, " "))] || "";
+                            interpretationToAssign = testInterpretations[slugifyTestName(testKeyFromDetail.replace(/_/g, " "))] || "";
                         }
-
 
                         console.log(`Processing test ${testKeyFromDetail} for patientData:`);
                         console.log(`  - reportedOn: ${testInfo.reportedOn}`);
                         console.log(`  - original test name (derived): ${originalTestNameForThisDetail}`);
                         console.log(`  - interpretation assigned: ${interpretationToAssign}`);
-
 
                         bloodtestFromDetail[testKeyFromDetail] = {
                             testId: testKeyFromDetail, // Keep original key for bloodtest_detail structure
@@ -276,9 +276,12 @@ function DownloadReport() {
                         }
                     }
                 }
+
                 const finalBloodtestData = hideInvisible({ ...mappedPatientData, bloodtest: bloodtestFromDetail })
                 console.log("Final bloodtest data after hideInvisible (including interpretations):", finalBloodtestData);
+
                 setPatientData({ ...mappedPatientData, bloodtest: finalBloodtestData })
+
                 // Fetch historical registrations for the same patient using patientdetial.id
                 const { data: historicalRegistrations, error: historicalError } = await supabase
                     .from("registration")
@@ -289,14 +292,18 @@ function DownloadReport() {
                     )
                     .eq("patient_id", patientdetial.id)
                     .order("registration_time", { ascending: true })
+
                 if (historicalError) {
                     console.error("Historical registrations fetch error:", historicalError)
                     throw new Error(`Failed to fetch historical data: ${historicalError.message}`)
                 }
+
                 console.log("Historical registrations fetched:", historicalRegistrations)
+
                 const aggregatedHistoricalData: Record<string, HistoricalTestEntry[]> = {}
                 const initialComparisonSelections: Record<string, ComparisonTestSelection> = {}
-                historicalRegistrations.forEach((reg) => {
+
+                historicalRegistrations.forEach((reg: any) => { // Explicitly type reg as any for now
                     let regBloodtestDetail = reg.bloodtest_detail
                     if (typeof regBloodtestDetail === "string") {
                         try {
@@ -306,6 +313,7 @@ function DownloadReport() {
                             regBloodtestDetail = {}
                         }
                     }
+
                     let regBloodtestData = reg.bloodtest_data
                     if (typeof regBloodtestData === "string") {
                         try {
@@ -315,21 +323,26 @@ function DownloadReport() {
                             regBloodtestData = []
                         }
                     }
+
                     for (const [testKey, testDetail] of Object.entries(regBloodtestDetail || {})) {
                         const testInfo = testDetail as any
                         const originalTestName =
                             regBloodtestData?.find((t: any) => slugifyTestName(t.testName) === testKey || t.testName === testKey)
                                 ?.testName || testKey.replace(/_/g, " ")
+
                         const reportedOn = testInfo.reportedOn || reg.registration_time // Fallback to registration time
+
                         if (!aggregatedHistoricalData[testKey]) {
                             aggregatedHistoricalData[testKey] = []
                         }
+
                         aggregatedHistoricalData[testKey].push({
                             registrationId: reg.id,
                             reportedOn: reportedOn,
                             testKey: testKey,
                             parameters: testInfo.parameters || [],
                         })
+
                         if (!initialComparisonSelections[testKey]) {
                             initialComparisonSelections[testKey] = {
                                 testName: originalTestName,
@@ -338,6 +351,7 @@ function DownloadReport() {
                                 selectedDates: [],
                             }
                         }
+
                         initialComparisonSelections[testKey].availableDates.push({
                             date: new Date(reportedOn).toISOString(), // Use ISO string for consistent comparison
                             registrationId: reg.id,
@@ -346,16 +360,19 @@ function DownloadReport() {
                         })
                     }
                 })
+
                 // Sort available dates and pre-select latest N for common tests
                 for (const testKey in initialComparisonSelections) {
                     initialComparisonSelections[testKey].availableDates.sort(
                         (a, b) => new Date(a.reportedOn).getTime() - new Date(b.reportedOn).getTime(),
                     )
+
                     const numToSelect = testKey === "cbc" ? 4 : testKey === "lft" ? 3 : 0 // Default N reports
                     initialComparisonSelections[testKey].selectedDates = initialComparisonSelections[testKey].availableDates
                         .slice(-numToSelect)
                         .map((d) => d.date)
                 }
+
                 setHistoricalTestsData(aggregatedHistoricalData)
                 setComparisonSelections(initialComparisonSelections)
             } catch (error) {
@@ -365,6 +382,7 @@ function DownloadReport() {
                 setLoading(false)
             }
         }
+
         fetchAllData()
     }, [registrationId])
 
@@ -379,9 +397,11 @@ function DownloadReport() {
     const hideInvisible = (d: PatientData): Record<string, BloodTestData> => {
         const out: Record<string, BloodTestData> = {}
         if (!d.bloodtest) return out
+
         for (const k in d.bloodtest) {
             const t = d.bloodtest[k]
             if (t.type === "outsource") continue
+
             const keptParams = Array.isArray(t.parameters)
                 ? t.parameters
                     .filter((p) => p.visibility !== "hidden")
@@ -392,6 +412,7 @@ function DownloadReport() {
                             : [],
                     }))
                 : []
+
             out[k] = {
                 ...t,
                 parameters: keptParams,
@@ -417,6 +438,7 @@ function DownloadReport() {
         })
 
         const currentTime = test.reportedOn && test.reportedOn !== null ? toLocalDateTimeString(test.reportedOn) : toLocalDateTimeString()
+
         setUpdateTimeModal({
             isOpen: true,
             testKey,
@@ -427,21 +449,26 @@ function DownloadReport() {
     // Save updated reportedOn time
     const saveUpdatedTime = async () => {
         if (!patientData || !updateTimeModal.testKey) return
+
         try {
             const newReportedOn = new Date(updateTimeModal.currentTime).toISOString()
+
             const updatedBloodtestDetail = {
                 ...patientData.bloodtest_detail,
                 [updateTimeModal.testKey]: {
-                    ...patientData.bloodtest_detail[updateTimeModal.testKey],
+                    ...patientData.bloodtest_detail[updateTimeModal.testKey] as BloodTestData, // Cast to BloodTestData
                     reportedOn: newReportedOn,
                 },
             }
+
             const { error } = await supabase
                 .from("registration")
                 .update({ bloodtest_detail: updatedBloodtestDetail })
                 .eq("id", patientData.registration_id)
+
             if (error) throw error
-            setPatientData((prev) => {
+
+            setPatientData((prev: PatientData | null) => { // Explicitly type prev
                 if (!prev) return prev
                 return {
                     ...prev,
@@ -457,7 +484,8 @@ function DownloadReport() {
                         : undefined,
                 }
             })
-            setUpdateTimeModal((prev) => ({ ...prev, isOpen: false }))
+
+            setUpdateTimeModal((prev: typeof updateTimeModal) => ({ ...prev, isOpen: false })) // Explicitly type prev
             alert("Report time updated successfully!")
         } catch (error) {
             console.error("Error updating report time:", error)
@@ -470,6 +498,7 @@ function DownloadReport() {
         const currentTime = patientData?.sampleCollectedAt
             ? toLocalDateTimeString(patientData.sampleCollectedAt)
             : toLocalDateTimeString()
+
         setUpdateSampleTimeModal({
             isOpen: true,
             currentTime,
@@ -479,6 +508,7 @@ function DownloadReport() {
     // Open modal to update createdAt (Registration On)
     const updateRegistrationTime = () => {
         const currentTime = patientData?.createdAt ? toLocalDateTimeString(patientData.createdAt) : toLocalDateTimeString()
+
         setUpdateRegistrationTimeModal({
             isOpen: true, // Changed to true to open the modal
             currentTime,
@@ -488,15 +518,19 @@ function DownloadReport() {
     // Save updated sampleCollectedAt time
     const saveUpdatedSampleTime = async () => {
         if (!patientData) return
+
         try {
             const newSampleAt = new Date(updateSampleTimeModal.currentTime).toISOString()
+
             const { error } = await supabase
                 .from("registration")
                 .update({ samplecollected_time: newSampleAt })
                 .eq("id", patientData.registration_id)
+
             if (error) throw error
-            setPatientData((prev) => (prev ? { ...prev, sampleCollectedAt: newSampleAt } : prev))
-            setUpdateSampleTimeModal((prev) => ({ ...prev, isOpen: false }))
+
+            setPatientData((prev: PatientData | null) => (prev ? { ...prev, sampleCollectedAt: newSampleAt } : prev)) // Explicitly type prev
+            setUpdateSampleTimeModal((prev: typeof updateSampleTimeModal) => ({ ...prev, isOpen: false })) // Explicitly type prev
             alert("Sample collected time updated successfully!")
         } catch (error) {
             console.error("Error updating sample collected time:", error)
@@ -507,15 +541,19 @@ function DownloadReport() {
     // Save updated registration time (createdAt)
     const saveUpdatedRegistrationTime = async () => {
         if (!patientData) return
+
         try {
             const newCreatedAt = new Date(updateRegistrationTimeModal.currentTime).toISOString()
+
             const { error } = await supabase
                 .from("registration")
                 .update({ registration_time: newCreatedAt })
                 .eq("id", patientData.registration_id)
+
             if (error) throw error
-            setPatientData((prev) => (prev ? { ...prev, createdAt: newCreatedAt } : prev))
-            setUpdateRegistrationTimeModal((prev) => ({ ...prev, isOpen: false }))
+
+            setPatientData((prev: PatientData | null) => (prev ? { ...prev, createdAt: newCreatedAt } : prev)) // Explicitly type prev
+            setUpdateRegistrationTimeModal((prev: typeof updateRegistrationTimeModal) => ({ ...prev, isOpen: false })) // Explicitly type prev
             alert("Registration time updated successfully!")
         } catch (error) {
             console.error("Error updating registration time:", error)
@@ -534,11 +572,11 @@ function DownloadReport() {
     }
 
     const removeCombinedGroup = (groupId: string) => {
-        setCombinedGroups(combinedGroups.filter((group) => group.id !== groupId))
+        setCombinedGroups(combinedGroups.filter((group: CombinedTestGroup) => group.id === groupId)) // Explicitly type group
     }
 
     const updateGroupName = (groupId: string, newName: string) => {
-        setCombinedGroups(combinedGroups.map((group) => (group.id === groupId ? { ...group, name: newName } : group)))
+        setCombinedGroups(combinedGroups.map((group: CombinedTestGroup) => (group.id === groupId ? { ...group, name: newName } : group))) // Explicitly type group
     }
 
     const handleDragStart = (testKey: string) => {
@@ -557,7 +595,8 @@ function DownloadReport() {
     const handleDrop = (e: React.DragEvent, groupId: string) => {
         e.preventDefault()
         if (!draggedTest) return
-        const updatedGroups = combinedGroups.map((group) => {
+
+        const updatedGroups = combinedGroups.map((group: CombinedTestGroup) => { // Explicitly type group
             if (group.id === groupId) {
                 if (!group.tests.includes(draggedTest)) {
                     return {
@@ -568,6 +607,7 @@ function DownloadReport() {
             }
             return group
         })
+
         setCombinedGroups(updatedGroups)
         setDraggedTest(null)
         setActiveGroupId(null)
@@ -575,22 +615,27 @@ function DownloadReport() {
 
     const removeTestFromGroup = (groupId: string, testKey: string) => {
         setCombinedGroups(
-            combinedGroups.map((group) =>
-                group.id === groupId ? { ...group, tests: group.tests.filter((t) => t !== testKey) } : group,
+            combinedGroups.map((group: CombinedTestGroup) => // Explicitly type group
+                group.id === groupId ? { ...group, tests: group.tests.filter((t: string) => t !== testKey) } : group, // Explicitly type t
             ),
         )
     }
 
     // Download PDF report
-    const downloadPDF = async (reportType: "normal" | "comparison" | "combined") => {
+    const downloadPDF = async (reportType: "normal" | "comparison" | "combined", includeLetterhead: boolean) => {
         if (!patientData) return
+
         setIsSending(true)
         try {
             console.log("Sending data to PDF generator:", {
                 patientData: patientData,
                 bloodtest: patientData.bloodtest,
-                selectedTests: selectedTests
+                selectedTests: selectedTests,
+                includeLetterhead: includeLetterhead
             })
+
+            // Always skip cover for all download buttons as per new requirement
+            const skipCoverForDownload = true;
 
             const blob = await generateReportPdf(
                 patientData,
@@ -599,15 +644,16 @@ function DownloadReport() {
                 historicalTestsData,
                 comparisonSelections,
                 reportType,
-                true, // Always include letterhead for downloads
-                false, // Never skip cover for downloads
+                includeLetterhead, // Pass the includeLetterhead flag
+                skipCoverForDownload, // Now always true for downloads
                 undefined, // No AI suggestions for direct download
                 false, // Do not include AI suggestions page
             )
+
             const url = URL.createObjectURL(blob)
             const a = document.createElement("a")
             a.href = url
-            a.download = `report-${patientData.name.replace(/\s+/g, "-").toLowerCase()}-${reportType}.pdf`
+            a.download = `report-${patientData.name.replace(/\s+/g, "-").toLowerCase()}-${reportType}${includeLetterhead ? "" : "-no-letterhead"}.pdf`
             document.body.appendChild(a)
             a.click()
             document.body.removeChild(a)
@@ -622,6 +668,7 @@ function DownloadReport() {
 
     const preview = async (reportType: "normal" | "comparison" | "combined", withLetter: boolean) => {
         if (!patientData) return
+
         try {
             const blob = await generateReportPdf(
                 patientData,
@@ -635,9 +682,22 @@ function DownloadReport() {
                 undefined, // No AI suggestions for preview
                 false, // Do not include AI suggestions page
             )
+
             const url = URL.createObjectURL(blob)
-            window.open(url, "_blank")
-            setTimeout(() => URL.revokeObjectURL(url), 10_000)
+            const a = document.createElement("a")
+            a.href = url
+            // Set the download attribute to suggest a filename if the user clicks download in the preview tab
+            // This is the primary way to influence the downloaded file name when using a Blob URL for preview.
+            a.download = `report-${patientData.name.replace(/\s+/g, "-").toLowerCase()}-${reportType}.pdf`
+            // Open the URL in a new tab
+            const newWindow = window.open(url, "_blank");
+            // Revoke the object URL after a delay (e.g., 10 seconds)
+            // This is good practice to release memory, but still allows the user to download
+            // if they quickly open the new tab and initiate a download.
+            // Note: The URL in the address bar will still be a blob: UUID, this cannot be changed.
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 10_000); // 10 seconds
         } catch (err) {
             console.error("Preview error:", err)
             alert("Failed to generate preview.")
@@ -646,6 +706,7 @@ function DownloadReport() {
 
     const sendWhatsApp = async () => {
         if (!patientData) return
+
         try {
             setIsSending(true)
 
@@ -664,29 +725,36 @@ function DownloadReport() {
                 aiSuggestions, // Pass AI suggestions
                 true, // Include AI suggestions page for WhatsApp (this will be page 2)
             )
+
             const filename = `reports/${patientData.registration_id}_${Date.now()}.pdf`
+
             const { data: uploadData, error: uploadError } = await supabase.storage.from("reports").upload(filename, blob, {
                 cacheControl: "3600",
                 upsert: false,
                 contentType: "application/pdf",
             })
+
             if (uploadError) {
                 console.error("Supabase upload error:", uploadError)
                 throw new Error(`Failed to upload file to Supabase: ${uploadError.message}`)
             }
+
             const { data: publicUrlData } = supabase.storage.from("reports").getPublicUrl(filename)
             const url = publicUrlData.publicUrl
+
             const payload = {
                 token: "99583991573",
                 number: "91" + patientData.contact,
                 imageUrl: url,
                 caption: `Dear ${patientData.name},\n\nYour blood test report is now available:\n${url}\n\nRegards,\nYour Lab Team`,
             }
+
             const res = await fetch("https://a.infispark.in/send-image-url", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             })
+
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({ message: "Unknown error" }))
                 console.error("WhatsApp API Error:", errorData)
@@ -762,6 +830,7 @@ function DownloadReport() {
                     {/* Report Actions Card */}
                     <div className="bg-white rounded-xl shadow-lg p-8 space-y-4 col-span-1 md:col-span-2">
                         <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Report Ready</h2>
+
                         {/* Patient Info Display */}
                         <div className="p-4 bg-blue-50 rounded-lg mb-4">
                             <h3 className="text-lg font-semibold text-gray-800 mb-2">Patient Information</h3>
@@ -788,6 +857,7 @@ function DownloadReport() {
                                 </div>
                             </div>
                         </div>
+
                         {/* Registration On Display and Update Button */}
                         <div className="p-4 bg-gray-100 rounded-lg">
                             <div className="flex items-center justify-between">
@@ -819,6 +889,7 @@ function DownloadReport() {
                                 </button>
                             </div>
                         </div>
+
                         {/* Sample Collected On Display and Update Button */}
                         <div className="p-4 bg-gray-100 rounded-lg">
                             <div className="flex items-center justify-between">
@@ -850,6 +921,7 @@ function DownloadReport() {
                                 </button>
                             </div>
                         </div>
+
                         {/* Comparison Report Checkbox */}
                         <div className="p-4 bg-gray-100 rounded-lg">
                             <label className="flex items-center space-x-3">
@@ -862,10 +934,11 @@ function DownloadReport() {
                                 <span className="text-gray-700 font-medium">Generate Comparison Report</span>
                             </label>
                         </div>
+
                         {/* Download Buttons */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4"> {/* Changed to 4 columns */}
                             <button
-                                onClick={() => downloadPDF("normal")}
+                                onClick={() => downloadPDF("normal", true)} // Include letterhead, skipCover true (all downloads)
                                 className="w-full flex items-center justify-center space-x-3 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out"
                                 disabled={isSending}
                             >
@@ -883,10 +956,33 @@ function DownloadReport() {
                                         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                                     />
                                 </svg>
-                                <span>Download Report</span>
+                                <span>Download Report Letterhead</span>
                             </button>
+
                             <button
-                                onClick={() => downloadPDF("combined")}
+                                onClick={() => downloadPDF("normal", false)} // Exclude letterhead, skipCover true (all downloads)
+                                className="w-full flex items-center justify-center space-x-3 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out"
+                                disabled={isSending}
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                    />
+                                </svg>
+                                <span>Download Report No Letterhead</span>
+                            </button>
+
+                            <button
+                                onClick={() => downloadPDF("combined", true)} // skipCover true (all downloads)
                                 className="w-full flex items-center justify-center space-x-3 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out"
                                 disabled={isSending}
                             >
@@ -906,8 +1002,9 @@ function DownloadReport() {
                                 </svg>
                                 <span>Download Combined</span>
                             </button>
+
                             <button
-                                onClick={() => downloadPDF("comparison")}
+                                onClick={() => downloadPDF("comparison", true)} // skipCover true (all downloads)
                                 className="w-full flex items-center justify-center space-x-3 bg-sky-600 hover:bg-sky-700 text-white px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out"
                                 disabled={isSending}
                             >
@@ -928,6 +1025,7 @@ function DownloadReport() {
                                 <span>Download Comparison</span>
                             </button>
                         </div>
+
                         {/* Preview Buttons */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <button
@@ -956,6 +1054,7 @@ function DownloadReport() {
                                 </svg>
                                 <span>Preview (Letterhead)</span>
                             </button>
+
                             <button
                                 onClick={() => preview(isComparisonMode ? "comparison" : "normal", false)}
                                 className="w-full flex items-center justify-center space-x-3 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out"
@@ -983,6 +1082,7 @@ function DownloadReport() {
                                 <span>Preview (No letterhead)</span>
                             </button>
                         </div>
+
                         {/* WhatsApp Button */}
                         <>
                             <button
@@ -996,6 +1096,7 @@ function DownloadReport() {
                                 </svg>
                                 <span>{isSending ? "Sending…" : "Send via WhatsApp"}</span>
                             </button>
+
                             {/* Loading Overlay Popup */}
                             {isSending && (
                                 <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-40">
@@ -1007,6 +1108,7 @@ function DownloadReport() {
                             )}
                         </>
                     </div>
+
                     {/* Test Selection Card */}
                     {!isComparisonMode && (
                         <div className="bg-white rounded-xl shadow-lg p-8 space-y-4">
@@ -1016,9 +1118,10 @@ function DownloadReport() {
                                     Object.entries(patientData.bloodtest).map(([testKey, testData]) => {
                                         console.log(`Displaying test ${testKey}:`, {
                                             testData: testData,
-                                            reportedOn: testData.reportedOn,
+                                            reportedOn: (testData as BloodTestData).reportedOn, // Cast testData
                                             bloodtestDetail: patientData?.bloodtest_detail?.[testKey]
                                         })
+
                                         return (
                                             <div key={testKey} className="border rounded-lg p-3 bg-gray-50">
                                                 <div className="flex items-center justify-between mb-2">
@@ -1031,7 +1134,7 @@ function DownloadReport() {
                                                                 if (e.target.checked) {
                                                                     setSelectedTests([...selectedTests, testKey])
                                                                 } else {
-                                                                    setSelectedTests(selectedTests.filter((key) => key !== testKey))
+                                                                    setSelectedTests(selectedTests.filter((key: string) => key !== testKey)) // Explicitly type key
                                                                 }
                                                             }}
                                                         />
@@ -1060,11 +1163,11 @@ function DownloadReport() {
                                                 </div>
                                                 <div className="ml-8 text-sm text-gray-600">
                                                     <span className="font-medium">Reported On:</span>{" "}
-                                                    {testData.reportedOn && testData.reportedOn !== null ? (
+                                                    {(testData as BloodTestData).reportedOn && (testData as BloodTestData).reportedOn !== null ? ( // Cast testData
                                                         <span>
-                                                            {format12Hour(testData.reportedOn)}
+                                                            {format12Hour((testData as BloodTestData).reportedOn as string)} {/* Cast testData and reportedOn */}
                                                             <span className="text-xs text-gray-400 ml-2">
-                                                                (Raw: {testData.reportedOn})
+                                                                (Raw: {(testData as BloodTestData).reportedOn}) {/* Cast testData */}
                                                             </span>
                                                         </span>
                                                     ) : (
@@ -1077,18 +1180,19 @@ function DownloadReport() {
                             </div>
                         </div>
                     )}
+
                     {/* Comparison Report Test and Date Selection Card */}
                     {isComparisonMode && (
                         <div className="bg-white rounded-xl shadow-lg p-8 space-y-4 col-span-1 md:col-span-2">
                             <h2 className="text-2xl font-bold text-gray-800 mb-4">Select Tests and Dates for Comparison</h2>
                             <div className="space-y-4">
-                                {Object.values(comparisonSelections).map((selection) => (
+                                {Object.values(comparisonSelections).map((selection: ComparisonTestSelection) => ( // Explicitly type selection
                                     <div key={selection.slugifiedTestName} className="border rounded-lg p-4">
                                         <h3 className="text-lg font-semibold text-gray-800 mb-2">
                                             {selection.testName} ({selection.availableDates.length} reports available)
                                         </h3>
                                         <div className="flex flex-wrap gap-2">
-                                            {selection.availableDates.map((dateEntry) => (
+                                            {selection.availableDates.map((dateEntry: { date: string; reportedOn: string; }) => ( // Explicitly type dateEntry
                                                 <label
                                                     key={dateEntry.date}
                                                     className="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full text-sm"
@@ -1098,10 +1202,11 @@ function DownloadReport() {
                                                         className="form-checkbox h-4 w-4 text-indigo-600 rounded"
                                                         checked={selection.selectedDates.includes(dateEntry.date)}
                                                         onChange={(e) => {
-                                                            setComparisonSelections((prev) => {
+                                                            setComparisonSelections((prev: Record<string, ComparisonTestSelection>) => { // Explicitly type prev
                                                                 const newSelectedDates = e.target.checked
                                                                     ? [...prev[selection.slugifiedTestName].selectedDates, dateEntry.date]
-                                                                    : prev[selection.slugifiedTestName].selectedDates.filter((d) => d !== dateEntry.date)
+                                                                    : prev[selection.slugifiedTestName].selectedDates.filter((d: string) => d !== dateEntry.date) // Explicitly type d
+
                                                                 return {
                                                                     ...prev,
                                                                     [selection.slugifiedTestName]: {
@@ -1115,6 +1220,8 @@ function DownloadReport() {
                                                     <span className="text-gray-700">
                                                         {new Date(dateEntry.reportedOn).toLocaleDateString("en-GB", {
                                                             day: "2-digit",
+                                                            month: "2-digit",
+                                                            year: "numeric"
                                                         })}
                                                     </span>
                                                 </label>
@@ -1125,6 +1232,7 @@ function DownloadReport() {
                             </div>
                         </div>
                     )}
+
                     {/* Combined Test Groups Card */}
                     {!isComparisonMode && (
                         <div className="bg-white rounded-xl shadow-lg p-8 space-y-4">
@@ -1137,10 +1245,11 @@ function DownloadReport() {
                                     {showCombineInterface ? "Hide" : "Show"} Interface
                                 </button>
                             </div>
+
                             {showCombineInterface && (
                                 <>
                                     <div className="space-y-4">
-                                        {combinedGroups.map((group) => (
+                                        {combinedGroups.map((group: CombinedTestGroup) => ( // Explicitly type group
                                             <div
                                                 key={group.id}
                                                 className={`border-2 rounded-xl p-4 ${activeGroupId === group.id ? "border-blue-500" : "border-gray-300"
@@ -1164,48 +1273,33 @@ function DownloadReport() {
                                                     </button>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
-                                                    {group.tests.map((testKey) => (
+                                                    {group.tests.map((testKey: string) => ( // Explicitly type testKey
                                                         <div
                                                             key={testKey}
-                                                            className="bg-gray-100 px-3 py-1 rounded-full text-sm flex items-center space-x-1"
+                                                            draggable="true"
+                                                            onDragStart={() => handleDragStart(testKey)}
+                                                            className="bg-yellow-100 px-3 py-1 rounded-full text-sm cursor-grab"
                                                         >
-                                                            <span>{testKey.replace(/_/g, " ")}</span>
-                                                            <button
-                                                                onClick={() => removeTestFromGroup(group.id, testKey)}
-                                                                className="text-red-500 hover:text-red-700"
-                                                            >
-                                                                <svg
-                                                                    xmlns="http://www.w3.org/2000/svg"
-                                                                    className="h-4 w-4"
-                                                                    fill="none"
-                                                                    viewBox="0 0 24 24"
-                                                                    stroke="currentColor"
-                                                                >
-                                                                    <path
-                                                                        strokeLinecap="round"
-                                                                        strokeLinejoin="round"
-                                                                        strokeWidth={2}
-                                                                        d="M6 18L18 6M6 6l12 12"
-                                                                    />
-                                                                </svg>
-                                                            </button>
+                                                            {testKey.replace(/_/g, " ")}
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
+
                                     <button
                                         onClick={addCombinedGroup}
                                         className="px-4 py-2 bg-green-500 hover:bg-green-700 text-white rounded-xl transition duration-150 ease-in-out"
                                     >
                                         Add New Group
                                     </button>
+
                                     <div className="border-t pt-4">
                                         <h3 className="text-lg font-semibold text-gray-700 mb-2">Drag Tests to Groups</h3>
                                         <div className="flex flex-wrap gap-2">
                                             {patientData.bloodtest &&
-                                                Object.keys(patientData.bloodtest).map((testKey) => (
+                                                Object.keys(patientData.bloodtest).map((testKey: string) => ( // Explicitly type testKey
                                                     <div
                                                         key={testKey}
                                                         draggable="true"
@@ -1223,6 +1317,7 @@ function DownloadReport() {
                     )}
                 </div>
             </div>
+
             {/* Update Time Modal */}
             {updateTimeModal.isOpen && (
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -1246,7 +1341,7 @@ function DownloadReport() {
                                 </button>
                                 <button
                                     className="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 mt-2"
-                                    onClick={() => setUpdateTimeModal((prev) => ({ ...prev, isOpen: false }))}
+                                    onClick={() => setUpdateTimeModal((prev: typeof updateTimeModal) => ({ ...prev, isOpen: false }))}
                                 >
                                     Cancel
                                 </button>
@@ -1255,6 +1350,7 @@ function DownloadReport() {
                     </div>
                 </div>
             )}
+
             {/* Update Sample Time Modal */}
             {updateSampleTimeModal.isOpen && (
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -1278,7 +1374,7 @@ function DownloadReport() {
                                 </button>
                                 <button
                                     className="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 mt-2"
-                                    onClick={() => setUpdateSampleTimeModal((prev) => ({ ...prev, isOpen: false }))}
+                                    onClick={() => setUpdateSampleTimeModal((prev: typeof updateSampleTimeModal) => ({ ...prev, isOpen: false }))}
                                 >
                                     Cancel
                                 </button>
@@ -1287,6 +1383,7 @@ function DownloadReport() {
                     </div>
                 </div>
             )}
+
             {/* Update Registration Time Modal */}
             {updateRegistrationTimeModal.isOpen && (
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -1299,7 +1396,7 @@ function DownloadReport() {
                                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                                     value={updateRegistrationTimeModal.currentTime}
                                     onChange={(e) =>
-                                        setUpdateRegistrationTimeModal({ ...updateRegistrationTimeModal, currentTime: e.target.value })
+                                        setUpdateRegistrationTimeModal((prev: typeof updateRegistrationTimeModal) => ({ ...prev, currentTime: e.target.value })) // Explicitly type prev
                                     }
                                 />
                             </div>
@@ -1312,7 +1409,7 @@ function DownloadReport() {
                                 </button>
                                 <button
                                     className="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 mt-2"
-                                    onClick={() => setUpdateRegistrationTimeModal((prev) => ({ ...prev, isOpen: false }))}
+                                    onClick={() => setUpdateRegistrationTimeModal((prev: typeof updateRegistrationTimeModal) => ({ ...prev, isOpen: false }))}
                                 >
                                     Cancel
                                 </button>
