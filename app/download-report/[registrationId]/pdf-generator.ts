@@ -889,41 +889,47 @@ export const generateReportPdf = async (
       loadImageAsCompressedJPEG(eatImg.src, 0.7),
     ])
 
-  const addStampsAndPrintedBy = async (
-    doc: jsPDF,
-    w: number,
-    h: number,
-    left: number,
-    enteredBy: string,
-    includeStamps: boolean,
-  ) => {
-    if (includeStamps) {
-      // Calculate stamp dimensions maintaining aspect ratio
-      const stampAspectRatio = loadedStamp ? loadedStamp.width / loadedStamp.height : 1.33
-      const stamp2AspectRatio = loadedStamp2 ? loadedStamp2.width / loadedStamp2.height : 1.0
-
-      const stampHeight = STAMP_WIDTH / stampAspectRatio
-      const stamp2Height = STAMP_WIDTH / stamp2AspectRatio
-
-      // Position stamps from bottom, maintaining their individual heights
-      const sy2 = h - stamp2Height - STAMP_BOTTOM_MARGIN
-      const sy1 = h - stampHeight - STAMP_BOTTOM_MARGIN
-      const sx2 = w - left - STAMP_WIDTH
-
-      if (loadedStamp2) doc.addImage(loadedStamp2.dataUrl, "JPEG", sx2, sy2, STAMP_WIDTH, stamp2Height)
-      // const sx1 = (w - STAMP_WIDTH) / 2 // This line was commented out in your original code
-      // if (loadedStamp) doc.addImage(loadedStamp.dataUrl, "JPEG", sx1, sy1, STAMP_WIDTH, stampHeight)
-
-      // Position "Printed by" text below the taller stamp
-      const maxStampHeight = Math.max(stampHeight, stamp2Height)
-      doc.setFont("helvetica", "normal").setFontSize(10)
-      doc.text(`Printed by ${enteredBy}`, left, h - maxStampHeight - STAMP_BOTTOM_MARGIN + maxStampHeight - 1)
-    } else {
-      // If stamps are not included, just place "Printed by" at the bottom left
-      doc.setFont("helvetica", "normal").setFontSize(10)
-      doc.text(`Printed by ${enteredBy}`, left, h - footerMargin + 5)
-    }
-  }
+    const addStampsAndPrintedBy = async (
+      doc: jsPDF,
+      w: number,
+      h: number,
+      left: number,
+      enteredBy: string,
+      includeStamps: boolean, // This parameter currently controls stamps. We'll adjust its use.
+    ) => {
+      // Always display stamps if loaded, regardless of `includeStamps` parameter.
+      // The `includeStamps` parameter from the function signature will effectively be ignored for stamps.
+      // It will still be used to decide the positioning of "Printed by".
+      const displayStamps = loadedStamp && loadedStamp2; // Check if images were successfully loaded
+    
+      if (displayStamps) {
+        // Calculate stamp dimensions maintaining aspect ratio
+        const stampAspectRatio = loadedStamp ? loadedStamp.width / loadedStamp.height : 1.33;
+        const stamp2AspectRatio = loadedStamp2 ? loadedStamp2.width / loadedStamp2.height : 1.0;
+    
+        const stampHeight = STAMP_WIDTH / stampAspectRatio;
+        const stamp2Height = STAMP_WIDTH / stamp2AspectRatio;
+    
+        // Position stamps from bottom, maintaining their individual heights
+        const sy2 = h - stamp2Height - STAMP_BOTTOM_MARGIN;
+        const sy1 = h - stampHeight - STAMP_BOTTOM_MARGIN;
+        const sx2 = w - left - STAMP_WIDTH;
+    
+        if (loadedStamp2) doc.addImage(loadedStamp2.dataUrl, "JPEG", sx2, sy2, STAMP_WIDTH, stamp2Height);
+        // const sx1 = (w - STAMP_WIDTH) / 2 // This line was commented out in your original code
+        // if (loadedStamp) doc.addImage(loadedStamp.dataUrl, "JPEG", sx1, sy1, STAMP_WIDTH, stampHeight)
+    
+        // Position "Printed by" text below the taller stamp if stamps are shown
+        const maxStampHeight = Math.max(stampHeight, stamp2Height);
+        doc.setFont("helvetica", "normal").setFontSize(10);
+        doc.text(`Printed by ${enteredBy}`, left, h - maxStampHeight - STAMP_BOTTOM_MARGIN + maxStampHeight - 1);
+      } else {
+        // If stamps are not loaded or not to be displayed (though we're trying to always display them if loaded),
+        // just place "Printed by" at the bottom left as a fallback.
+        doc.setFont("helvetica", "normal").setFontSize(10);
+        doc.text(`Printed by ${enteredBy}`, left, h - footerMargin + 5);
+      }
+    };
 
   const headerY = (reportedOnRaw?: string) => {
     const gap = 7
