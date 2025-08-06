@@ -1039,37 +1039,18 @@ export const generateReportPdf = async (
       }
       if (!rangeStr && arr.length) rangeStr = arr[arr.length - 1].rangeValue
     }
-
+  
     rangeStr = rangeStr.replaceAll("/n", "\n")
     const rawValue = String(p.value).trim()
     const valStr = p.value !== "" ? `${p.value}` : "-"
     const rangeEmpty = rangeStr.trim() === ""
     const unitEmpty = p.unit.trim() === ""
     const fullyMerged = rangeEmpty && unitEmpty
-
-    const nameLines = doc.splitTextToSize(" ".repeat(indent) + p.name, wParam - 4)
-    let valueSpan = wValue
-    if (fullyMerged) valueSpan = wValue + wUnit + wRange
-    else if (unitEmpty) valueSpan = wValue + wUnit
-
-    const estimatedRowHeight =
-      Math.max(
-        nameLines.length,
-        doc.splitTextToSize(valStr, valueSpan - 4).length,
-        fullyMerged ? 0 : doc.splitTextToSize(rangeStr, wRange - 4).length,
-        unitEmpty || fullyMerged ? 0 : doc.splitTextToSize(p.unit, wUnit - 4).length,
-      ) * lineH
-
-    y = await ensureSpace(y, estimatedRowHeight, reportedOnRaw)
-
-    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0)
-    doc.text(nameLines, x1, y + 4)
-
+  
+    // Determine if value is low or high
     const numRange = parseNumericRangeString(rangeStr)
     const numVal = Number.parseFloat(rawValue)
     const isValueOutOfRange = numRange && !isNaN(numVal) && (numVal < numRange.lower || numVal > numRange.upper)
-
-    // Determine if value is low or high
     let valueWithIndicator = valStr
     if (isValueOutOfRange && numRange) {
       if (numVal < numRange.lower) {
@@ -1078,31 +1059,62 @@ export const generateReportPdf = async (
         valueWithIndicator = `${valStr} H`
       }
     }
-
+  
+    // --- Corrected logic for line wrapping and height calculation ---
+    const nameLines = doc.splitTextToSize(" ".repeat(indent) + p.name, wParam - 4)
+  
+    // Calculate dynamic width for the value column based on whether range and unit are present
+    let valueColumnWidth = wValue - 4
+    if (fullyMerged) {
+      valueColumnWidth = (wValue + wUnit + wRange) - 4
+    } else if (unitEmpty) {
+      valueColumnWidth = (wValue + wUnit) - 4
+    }
+    
+    const valueLines = doc.splitTextToSize(valueWithIndicator, valueColumnWidth)
+    const unitLines = doc.splitTextToSize(p.unit, wUnit - 4)
+    const rangeLines = doc.splitTextToSize(rangeStr, wRange - 4)
+  
+    const maxLines = Math.max(
+      nameLines.length,
+      valueLines.length,
+      unitEmpty || fullyMerged ? 0 : unitLines.length,
+      rangeEmpty || fullyMerged ? 0 : rangeLines.length,
+    )
+    const estimatedRowHeight = maxLines * lineH
+    // --- End of corrected logic ---
+  
+    y = await ensureSpace(y, estimatedRowHeight, reportedOnRaw)
+  
+    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0)
+    doc.text(nameLines, x1, y + 4)
+  
+    // Draw the value, with line wrapping
     doc.setFont("helvetica", isValueOutOfRange ? "bold" : "normal")
-    doc.text(valueWithIndicator, x2 + 2, y + 4)
+    doc.text(valueLines, x2 + 2, y + 4)
     doc.setFont("helvetica", "normal")
-
+  
     if (!fullyMerged) {
       if (!unitEmpty) {
-        doc.text(p.unit, x3 + 2, y + 4)
+        // Draw the unit, with line wrapping
+        doc.text(unitLines, x3 + 2, y + 4)
       }
       if (!rangeEmpty) {
-        doc.text(rangeStr, x4 + 2, y + 4)
+        // Draw the range, with line wrapping
+        doc.text(rangeLines, x4 + 2, y + 4)
       }
     }
-
+  
     y += estimatedRowHeight
-
+  
     if (p.subparameters?.length) {
       for (const sp of p.subparameters) {
         y = await printRow(sp, y, reportedOnRaw, indent + 2)
       }
     }
-
+  
     return y
   }
-
   const printTest = async (testKey: string, tData: BloodTestData, y: number): Promise<number> => {
     console.log(`Printing test ${testKey}:`, {
       reportedOn: tData.reportedOn,
