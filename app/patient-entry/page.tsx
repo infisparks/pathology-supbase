@@ -26,7 +26,7 @@ const TABLE = {
   DOCTOR: "doctorlist",
   PACKAGE: "packages",
   BLOOD: "blood_test",
-} as const
+} as const 
 
 function throwIfError(error: any) {
   if (error) throw error
@@ -329,9 +329,24 @@ export default function PatientEntryForm() {
     try {
       let patientDatabaseId: number
       if (data.existingPatientId) {
-        // Use existing patient
+        // Use existing patient and update their information
         patientDatabaseId = data.existingPatientId
         console.log("Using existing patient with ID:", patientDatabaseId)
+        
+        // Update existing patient information in the database
+        const mult = data.dayType === "year" ? 360 : data.dayType === "month" ? 30 : 1
+        const totalDay = data.age * mult
+        const { error: updateErr } = await supabase
+          .from(TABLE.PATIENT)
+          .update({
+            number: Number(data.contact),
+            age: data.age,
+            day_type: data.dayType,
+            total_day: totalDay,
+          })
+          .eq("id", patientDatabaseId)
+        throwIfError(updateErr)
+        console.log("Updated existing patient information")
       } else {
         // Create new patient
         if (!data.patientId) data.patientId = await generatePatientIdWithSequence()
@@ -576,7 +591,6 @@ export default function PatientEntryForm() {
                           })}
                           className={`h-8 pl-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
                           placeholder="Enter 10-digit mobile number"
-                          disabled={isExistingPatient}
                         />
                         <Phone className="h-4 w-4 absolute left-3 top-2.5 text-gray-400" />
                       </div>
@@ -594,7 +608,6 @@ export default function PatientEntryForm() {
                           min: { value: 1, message: "Age must be positive" },
                         })}
                         className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
-                        disabled={isExistingPatient}
                       />
                       {errors.age && <p className="text-red-500 text-xs mt-1">{errors.age.message}</p>}
                     </div>
@@ -603,7 +616,6 @@ export default function PatientEntryForm() {
                       <Select
                         value={watch("dayType")}
                         onValueChange={(v) => setValue("dayType", v as any)}
-                        disabled={isExistingPatient}
                       >
                         <SelectTrigger className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
                           <SelectValue />
@@ -635,7 +647,7 @@ export default function PatientEntryForm() {
                     <div className="col-span-3">
                       <Label className="text-sm">Hospital</Label>
                       <Select value={watch("hospitalName")} onValueChange={(v) => setValue("hospitalName", v)}>
-                        <SelectTrigger className="h-8">
+                        <SelectTrigger className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -650,7 +662,7 @@ export default function PatientEntryForm() {
                     <div className="col-span-2">
                       <Label className="text-sm">Visit Type</Label>
                       <Select value={watch("visitType")} onValueChange={(v) => setValue("visitType", v as any)}>
-                        <SelectTrigger className="h-8">
+                        <SelectTrigger className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

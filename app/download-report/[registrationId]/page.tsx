@@ -847,7 +847,7 @@ function DownloadReport() {
                                 </div>
                                 <div>
                                     <span className="font-medium">Age/Gender:</span> {patientData.age}{" "}
-                                    {patientData.total_day ? "Years" : "Days"} / {patientData.gender}
+                                    {patientData.day_type || "Years"} / {patientData.gender}
                                 </div>
                                 <div>
                                     <span className="font-medium">Contact:</span>{" "}

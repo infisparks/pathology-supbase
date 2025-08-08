@@ -402,7 +402,7 @@ export default function DeletedAppointments() {
                               <div className="font-medium text-gray-900">{appointment.name}</div>
                               <div className="text-sm text-gray-500">ID: {appointment.patient_id}</div>
                               <div className="text-xs text-gray-400">
-                                {appointment.age}y • {appointment.gender}
+                                {appointment.age}{appointment.day_type?.charAt(0).toUpperCase() || 'Y'} • {appointment.gender}
                               </div>
                             </div>
                           </div>
@@ -525,10 +525,10 @@ export default function DeletedAppointments() {
                           <span className="text-sm text-gray-600">Patient ID:</span>
                           <span className="text-sm font-medium text-gray-900">{selectedAppointment.patient_id}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Age:</span>
-                          <span className="text-sm font-medium text-gray-900">{selectedAppointment.age} years</span>
-                        </div>
+                                                 <div className="flex justify-between">
+                           <span className="text-sm text-gray-600">Age:</span>
+                           <span className="text-sm font-medium text-gray-900">{selectedAppointment.age} {selectedAppointment.day_type || 'years'}</span>
+                         </div>
                         <div className="flex justify-between">
                           <span className="text-sm text-gray-600">Gender:</span>
                           <span className="text-sm font-medium text-gray-900">{selectedAppointment.gender}</span>
