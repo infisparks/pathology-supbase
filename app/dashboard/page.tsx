@@ -111,13 +111,15 @@ export default function Dashboard() {
   const fetchDashboardStats = useCallback(async () => {
     try {
       const today = new Date().toISOString().split("T")[0]
+      const start = startDate && startDate.trim() ? new Date(`${startDate}T00:00:00`) : new Date(`${today}T00:00:00`)
+      const end = endDate && endDate.trim() ? new Date(`${endDate}T23:59:59`) : new Date(`${today}T23:59:59`)
 
       // Fetch all registrations to calculate totals and pending reports accurately
       const { data: allRegistrationsData, error: allRegistrationsError } = await supabase
         .from("registration")
         .select(
           `
-        id, registration_time, amount_paid, amount_paid_history, samplecollected_time, bloodtest_data,
+        id, registration_time, amount_paid, amount_paid_history, samplecollected_time, bloodtest_data, bloodtest_detail,
         patientdetial (
           id, name, patient_id, age, gender, number, address, day_type, total_day, title
         )
@@ -125,10 +127,10 @@ export default function Dashboard() {
         )
       if (allRegistrationsError) throw allRegistrationsError
 
-      let todayRegistrationsCount = 0;
-      let todayRevenue = 0;
-      let todayPendingReportsCount = 0; // Reports from today where samples are collected but tests aren't complete
-      let totalCompletedTestsCount = 0; // Total tests fully entered (across all dates)
+      let totalRegistrationsCount = 0;
+      let totalRevenue = 0;
+      let pendingReportsCount = 0;
+      let completedTestsCount = 0;
 
       if (allRegistrationsData) {
         const mappedRegistrations: Registration[] = allRegistrationsData.map((registrationRow: any) => {
@@ -146,7 +148,7 @@ export default function Dashboard() {
             sampleCollectedAt: registrationRow.samplecollected_time,
             paymentHistory: registrationRow.amount_paid_history || null,
             hospitalName: registrationRow.hospital_name,
-            patient_id: patientDetail.patient_id || "", // Ensure patient_id from patientdetial is used
+            patient_id: patientDetail.patient_id || "",
             name: patientDetail.name || "Unknown",
             patientId: patientDetail.patient_id || "",
             age: patientDetail.age || 0,
@@ -160,52 +162,52 @@ export default function Dashboard() {
           }
         });
 
-
         mappedRegistrations.forEach((reg) => {
-          // Check if registration is from today
-          const isTodayRegistration = reg.createdAt?.startsWith(today);
+          // Check if registration is within the date range
+          const regDate = new Date(reg.createdAt)
+          const isInDateRange = regDate >= start && regDate <= end
 
-          let regRevenue = 0
-          if (
-            reg.paymentHistory &&
-            typeof reg.paymentHistory === "object" &&
-            "paymentHistory" in reg.paymentHistory
-          ) {
-            const paymentData = reg.paymentHistory as PaymentHistory
-            regRevenue = paymentData.paymentHistory?.reduce((sum, payment) => sum + payment.amount, 0) || 0
-          } else {
-            regRevenue = reg.amountPaid || 0
-          }
+          if (isInDateRange) {
+            totalRegistrationsCount++;
 
-          if (isTodayRegistration) {
-            todayRegistrationsCount++;
-            todayRevenue += regRevenue;
-          }
+            let regRevenue = 0
+            if (
+              reg.paymentHistory &&
+              typeof reg.paymentHistory === "object" &&
+              "paymentHistory" in reg.paymentHistory
+            ) {
+              const paymentData = reg.paymentHistory as PaymentHistory
+              regRevenue = paymentData.paymentHistory?.reduce((sum, payment) => sum + payment.amount, 0) || 0
+            } else {
+              regRevenue = reg.amountPaid || 0
+            }
+            totalRevenue += regRevenue;
 
-          // Logic for Today's Pending Reports: Sample Collected AND Tests NOT Complete AND is Today's Registration
-          if (isTodayRegistration && reg.sampleCollectedAt && !isAllTestsComplete(reg)) {
-            todayPendingReportsCount++;
-          }
+            // Check status for completed tests and pending reports
+            const sampleCollected = !!reg.sampleCollectedAt
+            const complete = isAllTestsComplete(reg)
 
-          // Total Completed Tests (across all dates)
-          if (reg.sampleCollectedAt && isAllTestsComplete(reg)) {
-            totalCompletedTestsCount++;
+            if (sampleCollected && complete) {
+              completedTestsCount++;
+            } else if (sampleCollected && !complete) {
+              pendingReportsCount++;
+            }
           }
         })
       }
 
       setMetrics({
-        totalRegistrations: todayRegistrationsCount, // Display today's registrations by default
-        todayRegistrations: todayRegistrationsCount,
-        totalRevenue: todayRevenue, // Display today's revenue by default
-        todayRevenue: todayRevenue,
-        pendingReports: todayPendingReportsCount, // Correctly calculated today's pending reports
-        completedTests: totalCompletedTestsCount, // Renamed for clarity (previously pendingTests was used for samples not collected)
+        totalRegistrations: totalRegistrationsCount,
+        todayRegistrations: totalRegistrationsCount,
+        totalRevenue: totalRevenue,
+        todayRevenue: totalRevenue,
+        pendingReports: pendingReportsCount,
+        completedTests: completedTestsCount,
       })
     } catch (error: any) {
       console.error("Dashboard: Error fetching dashboard stats:", error.message)
     }
-  }, [])
+  }, [startDate, endDate])
 
   // Fetch Registrations (all data)
   const fetchRegistrations = useCallback(async () => {
@@ -301,6 +303,11 @@ export default function Dashboard() {
     fetchRegistrations()
     fetchDashboardStats()
   }, [fetchRegistrations, fetchDashboardStats])
+
+  // Update dashboard stats when date filters change
+  useEffect(() => {
+    fetchDashboardStats()
+  }, [startDate, endDate])
 
   // DB search effect for long search terms
   useEffect(() => {
