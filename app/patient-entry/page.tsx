@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { useForm, useFieldArray, type SubmitHandler } from "react-hook-form"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent } from "@/components/ui/card"
@@ -185,6 +185,9 @@ export default function PatientEntryForm() {
   const [searchText, setSearchText] = useState("")
   const [selectedTestId, setSelectedTestId] = useState<number | null>(null)
   const [isExistingPatient, setIsExistingPatient] = useState(false)
+  const patientHintsRef = useRef<HTMLDivElement | null>(null)
+  const doctorHintsRef = useRef<HTMLDivElement | null>(null)
+  const testSearchRef = useRef<HTMLDivElement | null>(null)
 
   /** field arrays */
   const {
@@ -236,6 +239,24 @@ export default function PatientEntryForm() {
     else if (female.has(titleValue)) setValue("gender", "Female")
     else if (none.has(titleValue)) setValue("gender", "")
   }, [titleValue, setValue])
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node
+      if (patientHintsRef.current && !patientHintsRef.current.contains(target)) {
+        setShowPatientHints(false)
+      }
+      if (doctorHintsRef.current && !doctorHintsRef.current.contains(target)) {
+        setShowDoctorHints(false)
+      }
+      if (testSearchRef.current && !testSearchRef.current.contains(target)) {
+        setSearchText("")
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
   /** patient autocomplete */
   const watchName = watch("name")
@@ -540,7 +561,7 @@ export default function PatientEntryForm() {
                       </Select>
                     </div>
                     {/* name + autocomplete */}
-                    <div className="col-span-6 relative">
+                    <div className="col-span-6 relative" ref={patientHintsRef}>
                       <Label className="text-sm">Full Name</Label>
                       <div className="relative">
                         <Input
@@ -570,7 +591,7 @@ export default function PatientEntryForm() {
                               className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
                               onClick={() => handlePatientSelect(p)}
                             >
-                              <div className="font-medium text-gray-900">{p.name}</div>
+                              <div className="font-medium text-gray-900">{(p.title && p.title !== ".") ? `${p.title} ` : ""}{p.name}</div>
                               <div className="text-xs text-gray-500">
                                 {p.patient_id} • {p.number} • {p.age}
                                 {p.day_type.charAt(0).toUpperCase()} • {p.gender}
@@ -687,7 +708,7 @@ export default function PatientEntryForm() {
                         disabled={isExistingPatient}
                       />
                     </div>
-                    <div className="col-span-5 relative">
+                    <div className="col-span-5 relative" ref={doctorHintsRef}>
                       <Label className="text-sm">Doctor Name</Label>
                       <Input
                         {...register("doctorName", {
@@ -805,7 +826,7 @@ export default function PatientEntryForm() {
                       <Button type="button" variant="outline" size="sm" onClick={removeAllTests}>
                         Remove All
                       </Button>
-                      <div className="relative">
+                      <div className="relative" ref={testSearchRef}>
                         <Input
                           type="text"
                           placeholder="Search tests..."
