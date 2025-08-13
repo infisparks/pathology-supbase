@@ -40,6 +40,29 @@ function time12ToISO(date: string, time12: string) {
   return new Date(`${date}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`).toISOString()
 }
 
+// Normalize various title inputs to one of the allowed values for the Title select
+const ALLOWED_TITLES: readonly string[] = [
+  ".",
+  "MR",
+  "MRS",
+  "MAST",
+  "BABA",
+  "MISS",
+  "MS",
+  "BABY",
+  "SMT",
+  "BABY OF",
+  "DR",
+]
+
+function normalizeTitle(raw?: string | null): string {
+  if (!raw) return "."
+  const t = String(raw).trim().toUpperCase()
+  if (t === "NOTITLE" || t === "NO TITLE" || t === "NONE") return "."
+  if (t === "BABYOF" || t === "BABY-OF" || t === "BABYOF.") return "BABY OF"
+  return ALLOWED_TITLES.includes(t) ? t : "."
+}
+
 /**
  * -----------------------------
  * Types
@@ -185,6 +208,7 @@ export default function PatientEntryForm() {
   const [searchText, setSearchText] = useState("")
   const [selectedTestId, setSelectedTestId] = useState<number | null>(null)
   const [isExistingPatient, setIsExistingPatient] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
 
   /** field arrays */
   const {
@@ -237,24 +261,69 @@ export default function PatientEntryForm() {
     else if (none.has(titleValue)) setValue("gender", "")
   }, [titleValue, setValue])
 
-  /** patient autocomplete */
-  const watchName = watch("name")
+  /** patient search by name or phone */
   useEffect(() => {
-    if (!watchName || watchName.trim().length < 2) {
+    if (!searchText || searchText.trim().length < 2) {
       setPatientHints([])
+      setShowPatientHints(false)
+      setIsSearching(false)
       return
     }
+    
+    setIsSearching(true)
+    setShowPatientHints(false)
+    
     const timer = setTimeout(async () => {
-      const { data, error } = await supabase
-        .from(TABLE.PATIENT)
-        .select("id, name, number, patient_id, title, age, day_type, gender, address")
-        .ilike("name", `${watchName.trim()}%`)
-        .limit(10)
-      throwIfError(error)
-      setPatientHints(data ?? [])
+      const searchTerm = searchText.trim()
+      try {
+        // Search by both name and phone number using proper Supabase syntax
+        console.log("Searching for:", searchTerm)
+        
+        // Try to search by name first
+        let { data, error } = await supabase
+          .from(TABLE.PATIENT)
+          .select("id, name, number, patient_id, title, age, day_type, gender, address")
+          .ilike("name", `%${searchTerm}%`)
+          .limit(10)
+        
+        // If no results by name, search by phone number
+        if (!data || data.length === 0) {
+          const { data: phoneData, error: phoneError } = await supabase
+            .from(TABLE.PATIENT)
+            .select("id, name, number, patient_id, title, age, day_type, gender, address")
+            .ilike("number", `%${searchTerm}%`)
+            .limit(10)
+          
+          if (phoneError) {
+            console.error("Phone search error:", phoneError)
+          } else {
+            data = phoneData
+            error = phoneError
+          }
+        }
+        
+        console.log("Search results:", data, "Error:", error)
+        
+        if (error) {
+          console.error("Search error:", error)
+          setPatientHints([])
+          setShowPatientHints(false)
+          setIsSearching(false)
+          return
+        }
+        
+        setPatientHints(data || [])
+        setShowPatientHints(Boolean(data && data.length > 0))
+        setIsSearching(false)
+      } catch (err) {
+        console.error("Search failed:", err)
+        setPatientHints([])
+        setShowPatientHints(false)
+        setIsSearching(false)
+      }
     }, 300)
     return () => clearTimeout(timer)
-  }, [watchName])
+  }, [searchText])
 
   /** derived totals */
   const bloodTests = watch("bloodTests")
@@ -275,18 +344,23 @@ export default function PatientEntryForm() {
     setValue("age", p.age)
     setValue("dayType", p.day_type)
     setValue("gender", p.gender)
-    setValue("title", p.title || "")
+    setValue("title", normalizeTitle(p.title))
     setValue("patientId", p.patient_id)
     setValue("address", p.address || "")
     setValue("existingPatientId", p.id) // Store the existing patient's database ID
     setIsExistingPatient(true)
     setShowPatientHints(false)
+    setSearchText("") // Clear the search text after selection
   }
 
   function handleNewPatient() {
     // Clear existing patient data when user starts typing a new name
     setValue("existingPatientId", undefined)
     setIsExistingPatient(false)
+    setSearchText("") // Clear search text
+    setShowPatientHints(false) // Hide patient hints
+    setPatientHints([]) // Clear patient hints
+    setIsSearching(false) // Clear searching state
   }
 
   function addTestById(id: number) {
@@ -450,6 +524,10 @@ export default function PatientEntryForm() {
       alert(message)
       reset(getDefaultFormValues())
       setIsExistingPatient(false)
+      setSearchText("") // Clear search text
+      setShowPatientHints(false) // Hide patient hints
+      setPatientHints([]) // Clear patient hints
+      setIsSearching(false) // Clear searching state
     } catch (err: any) {
       console.error(err)
       alert(err.message ?? "Unexpected error – check console")
@@ -495,6 +573,102 @@ export default function PatientEntryForm() {
 
               {/* Patient Information */}
               <div className="space-y-3">
+                {/* Existing Patient Search */}
+                <div className="bg-white p-3 rounded-lg border">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-3">Search Existing Patient</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 relative">
+                      <Input
+                        type="text"
+                        placeholder="Enter name or phone number to search existing patient..."
+                        className="h-10 pl-10"
+                        value={searchText}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          setSearchText(value)
+                          if (value.trim().length >= 2) {
+                            // Don't set showPatientHints here, let the useEffect handle it
+                          } else {
+                            setShowPatientHints(false)
+                            setPatientHints([])
+                          }
+                        }}
+                        onFocus={() => {
+                          if (searchText.trim().length >= 2 && patientHints.length > 0) {
+                            setShowPatientHints(true)
+                          }
+                        }}
+                        onBlur={() => {
+                          // Delay hiding hints to allow clicking on them
+                          setTimeout(() => setShowPatientHints(false), 200)
+                        }}
+                        onClick={() => {
+                          if (searchText.trim().length >= 2 && patientHints.length > 0) {
+                            setShowPatientHints(true)
+                          }
+                        }}
+                      />
+                      <Search className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
+                      
+                      {/* Search results dropdown */}
+                      {showPatientHints && patientHints.length > 0 && (
+                        <ul className="absolute z-10 w-full bg-white border border-gray-300 mt-1 rounded-md max-h-40 overflow-y-auto text-sm shadow-lg">
+                          {patientHints.map((p) => (
+                            <li
+                              key={p.id}
+                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                              onClick={() => handlePatientSelect(p)}
+                            >
+                              <div className="font-medium text-gray-900">{normalizeTitle(p.title) !== "." ? `${normalizeTitle(p.title)} ` : ""}{p.name}</div>
+                              <div className="text-xs text-gray-500">
+                                {p.patient_id} • {p.number} • {p.age}
+                                {p.day_type.charAt(0).toUpperCase()} • {p.gender}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      
+                      {/* No results message */}
+                      {showPatientHints && searchText.trim().length >= 2 && patientHints.length === 0 && (
+                        <div className="absolute z-10 w-full bg-white border border-gray-300 mt-1 rounded-md p-3 text-sm text-gray-500">
+                          No patients found matching "{searchText}"
+                        </div>
+                      )}
+                      
+                      {/* Loading indicator */}
+                      {isSearching && searchText.trim().length >= 2 && (
+                        <div className="absolute z-10 w-full bg-white border border-gray-300 mt-1 rounded-md p-3 text-sm text-gray-500">
+                          Searching...
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                                              onClick={() => {
+                          setSearchText("")
+                          setShowPatientHints(false)
+                          setPatientHints([])
+                          setIsSearching(false)
+                          handleNewPatient()
+                          setValue("name", "")
+                          setValue("contact", "")
+                          setValue("patientId", "")
+                        }}
+                      disabled={!isExistingPatient}
+                    >
+                      Clear Search
+                    </Button>
+                  </div>
+                  {isExistingPatient && (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span>Existing patient selected - you can now add a new registration</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="bg-white p-3 rounded-lg border">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-semibold text-gray-700">Patient Information</h3>
@@ -539,46 +713,24 @@ export default function PatientEntryForm() {
                         </SelectContent>
                       </Select>
                     </div>
-                    {/* name + autocomplete */}
-                    <div className="col-span-6 relative">
+                    {/* name - simplified without autocomplete */}
+                    <div className="col-span-6">
                       <Label className="text-sm">Full Name</Label>
                       <div className="relative">
                         <Input
                           {...register("name", {
                             required: "Name is required",
                             onChange: (e) => {
-                              if (!isExistingPatient) {
-                                setShowPatientHints(true)
-                                setValue("name", e.target.value.toUpperCase())
-                                handleNewPatient()
-                              }
+                              setValue("name", e.target.value.toUpperCase())
                             },
                           })}
                           className={`h-8 pl-10 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
-                          placeholder="Type at least 2 letters..."
-                          onFocus={() => !isExistingPatient && setShowPatientHints(true)}
+                          placeholder="Enter patient name"
                           disabled={isExistingPatient}
                         />
                         <UserCircle className="h-4 w-4 absolute left-3 top-2.5 text-gray-400" />
                       </div>
                       {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
-                      {showPatientHints && patientHints.length > 0 && !isExistingPatient && (
-                        <ul className="absolute z-10 w-full bg-white border border-gray-300 mt-1 rounded-md max-h-40 overflow-y-auto text-sm shadow-lg">
-                          {patientHints.map((p) => (
-                            <li
-                              key={p.id}
-                              className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                              onClick={() => handlePatientSelect(p)}
-                            >
-                              <div className="font-medium text-gray-900">{p.name}</div>
-                              <div className="text-xs text-gray-500">
-                                {p.patient_id} • {p.number} • {p.age}
-                                {p.day_type.charAt(0).toUpperCase()} • {p.gender}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
                     </div>
                     {/* phone */}
                     <div className="col-span-4">
