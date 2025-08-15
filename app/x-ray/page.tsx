@@ -2,14 +2,19 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { UserPlus, FlaskConical, Stethoscope, Eye, Trash2, Search, Filter, X } from 'lucide-react';
+import { UserPlus, FlaskConical, Stethoscope, Eye, Trash2, Search, Filter, X, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+// Import the new JSON data for examinations and prices
+import { xrayData } from './index';
 
 // Helper function to format date
 const formatDate = (dateString: string): string => {
@@ -17,22 +22,27 @@ const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString(undefined, options);
 };
 
-interface XrayTest {
-  name: string;
-  amount: number;
-}
+// Prepare a map for easy lookup of examination prices
+const examinationPriceMap = xrayData.xray_price_list.reduce<Record<string, any>>((acc, item) => {
+  acc[item.examination] = item;
+  return acc;
+}, {});
 
-// Dummy data for X-ray tests
-const dummyXrays: XrayTest[] = [
-  { name: 'Chest PA', amount: 500 },
-  { name: 'KUB', amount: 800 },
-  { name: 'Abdomen AP/LAT', amount: 1200 },
-  { name: 'Pelvis AP', amount: 750 },
-  { name: 'Shoulder AP', amount: 600 },
-  { name: 'Knee AP/LAT', amount: 700 },
-  { name: 'Ankle AP/LAT', amount: 650 },
-  { name: 'Foot AP/LAT', amount: 550 },
+// Prepare a map for easy lookup of procedure prices
+const procedurePriceMap = xrayData.procedure.reduce<Record<string, any>>((acc, item) => {
+  acc[item.name] = item;
+  return acc;
+}, {});
+
+// Combine all examinations and procedures into a single list for the dropdown
+const allExaminations = [
+  ...xrayData.xray_price_list.map(item => item.examination),
+  ...xrayData.procedure.map(item => item.name)
 ];
+
+// Separate examinations and procedures for better organization
+const regularExaminations = xrayData.xray_price_list.map(item => item.examination);
+const procedureExaminations = xrayData.procedure.map(item => item.name);
 
 // Helper function for exponential backoff retry logic
 const withRetry = async <T,>(fn: () => Promise<any>, retries = 3, delay = 1000): Promise<any> => {
@@ -61,20 +71,25 @@ export default function XrayPage() {
     discount: 0,
     paymentMethod: 'Cash',
     cashType: 'Cash',
-    onlineType: 'Credit card',
+    onlineType: 'UPI',
   });
 
   const [tableData, setTableData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOption, setFilterOption] = useState('All');
-  const [dateRange, setDateRange] = useState('Today');
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+    from: new Date(),
+    to: new Date(),
+  });
+  const [quickDateRange, setQuickDateRange] = useState('Today');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalData, setModalData] = useState<any | null>(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch initial data from Supabase
   const fetchData = useCallback(async () => {
@@ -119,34 +134,61 @@ export default function XrayPage() {
     }
 
     // Date range filter
+    const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const endOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    const sevenDaysAgoStart = new Date(startOfToday);
-    sevenDaysAgoStart.setDate(sevenDaysAgoStart.getDate() - 6); // includes today + past 6 = 7 days
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    let fromDate: Date | null = null;
+    let toDate: Date | null = null;
 
-    const isInRange = (createdAt?: string) => {
-      if (!createdAt) return false;
-      const d = new Date(createdAt);
-      if (isNaN(d.getTime())) return false;
-      switch (dateRange) {
-        case 'Today':
-          return d >= startOfToday && d <= endOfToday;
-        case 'Last 7 days':
-          return d >= sevenDaysAgoStart && d <= endOfToday;
-        case 'This Month':
-          return d >= startOfMonth && d <= endOfMonth;
-        default:
-          return true;
-      }
-    };
+    if (quickDateRange === 'Today') {
+      fromDate = startOfDay(now);
+      toDate = endOfDay(now);
+    } else if (quickDateRange === 'Last 7 days') {
+      const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      fromDate = sevenDaysAgo;
+      toDate = endOfDay(now);
+    } else if (quickDateRange === 'This Month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      fromDate = startOfMonth;
+      toDate = endOfMonth;
+    } else if (dateRange.from && dateRange.to) {
+      fromDate = startOfDay(dateRange.from);
+      toDate = endOfDay(dateRange.to);
+    }
 
-    updatedData = updatedData.filter(item => isInRange(item.created_at));
+    updatedData = updatedData.filter(item => {
+      if (!item.created_at) return false;
+      const itemDate = new Date(item.created_at);
+      if (fromDate && itemDate < fromDate) return false;
+      if (toDate && itemDate > toDate) return false;
+      return true;
+    });
 
     setFilteredData(updatedData);
-  }, [searchTerm, filterOption, dateRange, tableData]);
+  }, [searchTerm, filterOption, quickDateRange, dateRange, tableData]);
+
+  const handleDateRangeChange = (range: { from: Date | undefined; to: Date | undefined }) => {
+    setDateRange(range);
+    setQuickDateRange('Custom');
+  };
+
+  const handleQuickDateRangeChange = (value: string) => {
+    setQuickDateRange(value);
+    const now = new Date();
+    if (value === 'Today') {
+      setDateRange({ from: now, to: now });
+    } else if (value === 'Last 7 days') {
+      const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      setDateRange({ from: sevenDaysAgo, to: now });
+    } else if (value === 'This Month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setDateRange({ from: startOfMonth, to: endOfMonth });
+    } else {
+      setDateRange({ from: undefined, to: undefined });
+    }
+  };
 
   // Calculate total amount whenever x-ray tests or discount change
   useEffect(() => {
@@ -161,24 +203,51 @@ export default function XrayPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Handle changes for a specific X-ray test
-  const handleTestChange = (index: number, e: React.ChangeEvent<HTMLSelectElement>) => {
-    const { name, value } = e.target;
+  // Handle select changes for a specific X-ray test
+  const handleTestSelectChange = (index: number, name: string, value: string) => {
     const newTests = [...formData.xrayTests];
-    
     if (name === 'examination') {
-      const selectedXray = dummyXrays.find(x => x.name === value);
+      // Find the price data based on the selected examination
+      const xrayItem = examinationPriceMap[value];
+      const procedureItem = procedurePriceMap[value];
+      let amount = 0;
+
+      if (xrayItem) {
+        // Use the selected via to determine the price
+        const viaKey = newTests[index].xrayVia.toLowerCase();
+        amount = xrayItem[viaKey];
+      } else if (procedureItem) {
+        amount = procedureItem.price;
+      }
+
       newTests[index] = {
         ...newTests[index],
         examination: value,
-        amount: selectedXray ? selectedXray.amount : 0,
+        amount: amount,
       };
+      setSearchQuery(''); // Clear search query after selection
     } else if (name === 'views') {
       newTests[index] = { ...newTests[index], views: parseInt(value, 10) };
     } else if (name === 'xrayVia') {
-      newTests[index] = { ...newTests[index], xrayVia: value };
+      // When X-ray Via changes, update the amount based on the current examination
+      const currentExam = newTests[index].examination;
+      const xrayItem = examinationPriceMap[currentExam];
+      let amount = 0;
+      if (xrayItem) {
+        const viaKey = value.toLowerCase();
+        amount = xrayItem[viaKey];
+      }
+      newTests[index] = { ...newTests[index], xrayVia: value, amount: amount };
+    } else if (name === 'amount') {
+      // Handle direct amount changes
+      newTests[index] = { ...newTests[index], amount: parseFloat(value) || 0 };
     }
     setFormData(prev => ({ ...prev, xrayTests: newTests }));
+  };
+
+  // Check if examination is a procedure (HSG, IVP, BMFT, BM SWALLOW)
+  const isProcedureExamination = (examination: string) => {
+    return ['HSG', 'IVP', 'BMFT', 'BM SWALLOW'].includes(examination);
   };
 
   // Add a new X-ray test section
@@ -214,29 +283,32 @@ export default function XrayPage() {
         OnlineType: formData.paymentMethod.includes('Online') ? formData.onlineType : null,
       }];
 
-      const xrayDetail = formData.xrayTests.map(test => ({
-        Examination: test.examination,
-        Amount: test.amount,
-        View: test.views,
-        Xray_Via: test.xrayVia,
-      }));
-      
+      const xrayDetail = formData.xrayTests.map(test => {
+        const isProcedure = isProcedureExamination(test.examination);
+        return {
+          Examination: test.examination,
+          Xray_Via: isProcedure ? 'N/A' : test.xrayVia,
+          Amount: test.amount,
+          View: test.views,
+        };
+      });
+
       const dataToInsert = {
         name: formData.name,
         number: formData.phoneNumber,
         age: formData.age,
         age_unit: formData.ageUnit,
         Hospital_name: formData.hospitalName,
-        bill_number: formData.billNumber,
+        bill_number: formData.billNumber || null,
         amount_detail: amountDetail,
-        'x-ray_detail': xrayDetail, 
+        'x-ray_detail': xrayDetail,
       };
-      
+
       console.log('Data to insert:', dataToInsert);
-      
+
       // Insert data into Supabase
       const result = await withRetry(async () => await supabase.from('x-raydetail').insert(dataToInsert));
-      
+
       if (result.error) {
         console.error('Submission error:', result.error);
         setMessage(`Failed to submit the form: ${result.error.message || 'Unknown error'}`);
@@ -249,7 +321,7 @@ export default function XrayPage() {
           name: '', phoneNumber: '', age: '', ageUnit: 'Years',
           hospitalName: 'MEDFORD HOSPITAL', billNumber: '',
           xrayTests: [{ examination: '', amount: 0, views: 1, xrayVia: 'Price' }],
-          totalAmount: 0, discount: 0, paymentMethod: 'Cash', cashType: 'Cash', onlineType: 'Credit card'
+          totalAmount: 0, discount: 0, paymentMethod: 'Cash', cashType: 'Cash', onlineType: 'UPI'
         });
         fetchData();
       }
@@ -264,8 +336,6 @@ export default function XrayPage() {
 
   // Handle delete action
   const handleDelete = async (id: string) => {
-    // I have to remove the confirm pop-up here since it will not work in the Canvas environment.
-    // Instead, I'll delete directly.
     setIsLoading(true);
     const result = await withRetry(async () => await supabase.from('x-raydetail').delete().eq('id', id));
     if (result.error) {
@@ -336,7 +406,6 @@ export default function XrayPage() {
                   value={formData.billNumber}
                   onChange={handleChange}
                   className="p-3 border border-gray-300 rounded-lg focus-visible:ring-blue-500"
-                  required
                 />
               </div>
               <div className="flex flex-col">
@@ -393,7 +462,7 @@ export default function XrayPage() {
               </Button>
             </div>
             {formData.xrayTests.map((test, index) => (
-              <div key={index} className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 p-6 bg-white rounded-lg shadow-sm border border-gray-200 mt-4">
+              <div key={index} className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 p-6 bg-white rounded-lg shadow-sm border border-gray-200 mt-4">
                 {formData.xrayTests.length > 1 && (
                   <Button
                     type="button"
@@ -405,19 +474,75 @@ export default function XrayPage() {
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 )}
+                {/* Examination Dropdown */}
                 <div className="flex flex-col">
                   <Label className="text-sm font-semibold text-gray-700 mb-2" htmlFor={`examination-${index}`}>Examination</Label>
-                  <Select value={test.examination} onValueChange={(value) => handleTestChange(index, { target: { name: 'examination', value } } as any)}>
-                    <SelectTrigger className="p-3 h-auto border border-gray-300 rounded-lg focus-visible:ring-blue-500">
+                  <Select value={test.examination} onValueChange={(value) => handleTestSelectChange(index, 'examination', value)}>
+                    <SelectTrigger className="p-3 h-auto border border-gray-300 rounded-lg focus-visible:ring-blue-500 hover:border-blue-400 transition-colors duration-200 bg-white shadow-sm">
                       <SelectValue placeholder="Select Examination" />
                     </SelectTrigger>
-                    <SelectContent>
-                      {dummyXrays.map(xray => (
-                        <SelectItem key={xray.name} value={xray.name}>{xray.name}</SelectItem>
-                      ))}
+                    <SelectContent className="max-h-[300px] overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                      {/* Regular Examinations Section */}
+                      <div className="px-2 py-1">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 py-1.5 bg-gray-50 rounded-md mb-1">
+                          Regular Examinations
+                        </div>
+                        {regularExaminations.map(exam => (
+                          <SelectItem
+                            key={exam}
+                            value={exam}
+                            className="relative pl-8 pr-3 py-2.5 text-sm hover:bg-blue-50 focus:bg-blue-50 cursor-pointer rounded-md transition-colors duration-150"
+                          >
+                            <span className="block truncate">{exam}</span>
+                          </SelectItem>
+                        ))}
+                      </div>
+
+                      {/* Divider */}
+                      <div className="border-t border-gray-200 my-2"></div>
+
+                      {/* Procedure Section */}
+                      <div className="px-2 py-1">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 py-1.5 bg-orange-50 rounded-md mb-1">
+                          Procedure
+                        </div>
+                        {procedureExaminations.map(exam => (
+                          <SelectItem
+                            key={exam}
+                            value={exam}
+                            className="relative pl-8 pr-3 py-2.5 text-sm hover:bg-orange-50 focus:bg-orange-50 cursor-pointer rounded-md transition-colors duration-150"
+                          >
+                            <span className="block truncate">{exam}</span>
+                          </SelectItem>
+                        ))}
+                      </div>
                     </SelectContent>
                   </Select>
                 </div>
+                {/* X-ray Via */}
+                <div className="flex flex-col">
+                  <Label className="text-sm font-semibold text-gray-700 mb-2" htmlFor={`xrayVia-${index}`}>X-ray Via</Label>
+                  {isProcedureExamination(test.examination) ? (
+                    <Input
+                      type="text"
+                      value="N/A"
+                      readOnly
+                      className="p-3 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+                    />
+                  ) : (
+                    <Select value={test.xrayVia} onValueChange={(value) => handleTestSelectChange(index, 'xrayVia', value)}>
+                      <SelectTrigger className="p-3 h-auto border border-gray-300 rounded-lg focus-visible:ring-blue-500">
+                        <SelectValue placeholder="Select via" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Price">Price</SelectItem>
+                        <SelectItem value="Ward">Ward</SelectItem>
+                        <SelectItem value="ICU">ICU</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                {/* Amount */}
                 <div className="flex flex-col">
                   <Label className="text-sm font-semibold text-gray-700 mb-2" htmlFor={`amount-${index}`}>Amount</Label>
                   <Input
@@ -425,33 +550,21 @@ export default function XrayPage() {
                     name="amount"
                     id={`amount-${index}`}
                     value={test.amount}
-                    readOnly
-                    className="p-3 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+                    onChange={(e) => handleTestSelectChange(index, 'amount', e.target.value)}
+                    className="p-3 border border-gray-300 rounded-lg focus-visible:ring-blue-500"
                   />
                 </div>
+                {/* Views */}
                 <div className="flex flex-col">
                   <Label className="text-sm font-semibold text-gray-700 mb-2" htmlFor={`views-${index}`}>Views</Label>
-                  <Select value={String(test.views)} onValueChange={(value) => handleTestChange(index, { target: { name: 'views', value } } as any)}>
+                  <Select value={String(test.views)} onValueChange={(value) => handleTestSelectChange(index, 'views', value)}>
                     <SelectTrigger className="p-3 h-auto border border-gray-300 rounded-lg focus-visible:ring-blue-500">
                       <SelectValue placeholder="Select views" />
                     </SelectTrigger>
                     <SelectContent>
-                      {[1, 2, 3, 4, 5].map(v => (
-                        <SelectItem key={v} value={String(v)}>{v}</SelectItem>
+                      {[...Array(10)].map((_, v) => (
+                        <SelectItem key={v + 1} value={String(v + 1)}>{v + 1}</SelectItem>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col">
-                  <Label className="text-sm font-semibold text-gray-700 mb-2" htmlFor={`xrayVia-${index}`}>X-ray Via</Label>
-                  <Select value={test.xrayVia} onValueChange={(value) => handleTestChange(index, { target: { name: 'xrayVia', value } } as any)}>
-                    <SelectTrigger className="p-3 h-auto border border-gray-300 rounded-lg focus-visible:ring-blue-500">
-                      <SelectValue placeholder="Select via" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Price">Price</SelectItem>
-                      <SelectItem value="Ward">Ward</SelectItem>
-                      <SelectItem value="ICU">ICU</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -555,7 +668,7 @@ export default function XrayPage() {
       {/* --- */}
 
       {/* Data Table Section */}
-      <div className="mt-12">
+      <div className="mt-12 mb-10">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6">
           <h2 className="text-3xl font-bold text-gray-800 mb-4 md:mb-0 flex items-center">
             <Stethoscope className="mr-2 w-7 h-7 text-blue-600" />
@@ -573,17 +686,64 @@ export default function XrayPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             </div>
             <div className="relative w-full sm:w-auto">
-              <Select value={dateRange} onValueChange={setDateRange}>
+              <Select value={quickDateRange} onValueChange={handleQuickDateRangeChange}>
                 <SelectTrigger className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus-visible:ring-blue-500 w-full">
-                  <SelectValue placeholder="Date Range" />
+                  <SelectValue placeholder="Quick Date Range" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Today">Today</SelectItem>
                   <SelectItem value="Last 7 days">Last 7 days</SelectItem>
                   <SelectItem value="This Month">This Month</SelectItem>
+                  <SelectItem value="Custom">Custom Range</SelectItem>
                 </SelectContent>
               </Select>
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            </div>
+            <div className="flex w-full sm:w-auto space-x-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal pl-10",
+                      !dateRange.from && "text-muted-foreground"
+                    )}
+                  >
+                    <Calendar className="absolute left-3 w-5 h-5 text-gray-400" />
+                    {dateRange.from ? format(dateRange.from, "dd-MM-yyyy") : "Start Date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={dateRange.from}
+                    onSelect={(date) => handleDateRangeChange({ ...dateRange, from: date })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal pl-10",
+                      !dateRange.to && "text-muted-foreground"
+                    )}
+                  >
+                    <Calendar className="absolute left-3 w-5 h-5 text-gray-400" />
+                    {dateRange.to ? format(dateRange.to, "dd-MM-yyyy") : "End Date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={dateRange.to}
+                    onSelect={(date) => handleDateRangeChange({ ...dateRange, to: date })}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="relative w-full sm:w-auto">
               <Select value={filterOption} onValueChange={setFilterOption}>
@@ -602,44 +762,48 @@ export default function XrayPage() {
           </div>
         </div>
         <Card className="overflow-hidden bg-white rounded-2xl shadow-xl">
-          <div className="overflow-x-auto">
-            {isLoading ? (
-              <div className="p-8 text-center text-gray-500">Loading data...</div>
-            ) : (
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+          <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Contact</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Age</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Examination</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Total Amount</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {isLoading ? (
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Contact</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Age</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Examination</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Total Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                    <td colSpan={6} className="px-6 py-4 text-center text-gray-500">Loading data...</td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredData.length > 0 ? (
+                ) : (
+                  filteredData.length > 0 ? (
                     filteredData.map((row: any) => (
                       <tr key={row.id} className="hover:bg-gray-50 transition-colors duration-150">
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{row.name}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.number}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{`${row.age} ${row.age_unit}`}</td>
-                        <td className="px-6 py-4 text-sm text-gray-700 max-w-xs overflow-hidden">
-                          <ul className="list-disc list-inside space-y-1">
-                            {(() => {
-                              try {
-                                const data = typeof row['x-ray_detail'] === 'string' ? JSON.parse(row['x-ray_detail']) : row['x-ray_detail'];
-                                return data && Array.isArray(data) ? data.map((test: any, idx: number) => (
-                                  <li key={idx} className="text-xs text-gray-700 truncate">
-                                    {test.Examination}
-                                  </li>
-                                )) : <span className="text-xs text-gray-400">No tests</span>;
-                              } catch (error) {
-                                return <span className="text-xs text-gray-400">N/A</span>;
-                              }
-                            })()}
-                          </ul>
-                        </td>
+                                                 <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
+                           <div className="max-h-20 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                             <ul className="list-disc list-inside space-y-1">
+                               {(() => {
+                                 try {
+                                   const data = typeof row['x-ray_detail'] === 'string' ? JSON.parse(row['x-ray_detail']) : row['x-ray_detail'];
+                                   return data && Array.isArray(data) ? data.map((test: any, idx: number) => (
+                                     <li key={idx} className="text-xs text-gray-700 truncate">
+                                       {test.Examination}
+                                     </li>
+                                   )) : <span className="text-xs text-gray-400">No tests</span>;
+                                 } catch (error) {
+                                   return <span className="text-xs text-gray-400">N/A</span>;
+                                 }
+                               })()}
+                             </ul>
+                           </div>
+                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-700">
                           ₹{(() => {
                             try {
@@ -666,19 +830,15 @@ export default function XrayPage() {
                     <tr>
                       <td colSpan={6} className="px-6 py-4 text-center text-gray-500">No records found.</td>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
+                  )
+                )}
+              </tbody>
+            </table>
           </div>
         </Card>
       </div>
 
-      {/*
-        ------------------------------------------
-        View Details Modal - Professional Redesign
-        ------------------------------------------
-      */}
+      {/* View Details Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto p-8 rounded-2xl shadow-2xl bg-white border border-gray-200">
           {modalData && (
@@ -784,14 +944,6 @@ export default function XrayPage() {
               </div>
             </>
           )}
-          <Button
-            onClick={() => setShowModal(false)}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-2"
-            variant="ghost"
-          >
-            <X className="h-6 w-6" />
-            <span className="sr-only">Close</span>
-          </Button>
         </DialogContent>
       </Dialog>
     </div>
