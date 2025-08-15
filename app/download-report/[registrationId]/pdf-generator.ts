@@ -1130,10 +1130,14 @@ export const generateReportPdf = async (
     y += 10
 
     doc.setFontSize(10).setFillColor(0, 51, 102)
+    doc.setFontSize(10).setTextColor(0, 0, 0) // Set text color to black
     const rowH = 7
     y = await ensureSpace(y, rowH, tData.reportedOn)
-    doc.rect(left, y, totalW, rowH, "F")
-    doc.setTextColor(255, 255, 255)
+    doc.setDrawColor(0, 0, 0) // Set border color to black
+    doc.roundedRect(left, y, totalW, rowH, 1, 1, "S") // Draw a rounded rectangle with black border, "S" for stroke
+    // doc.setFillColor(0, 51, 102) // Removed background fill
+    // doc.rect(left, y, totalW, rowH, "F") // Removed fill rectangle
+    // doc.setTextColor(255, 255, 255) // Removed old text color
     doc.text("PARAMETER", x1 + 2, y + 5)
     doc.text("VALUE", x2 + 2, y + 5)
     doc.text("UNIT", x3 + 2, y + 5)
@@ -1190,8 +1194,8 @@ export const generateReportPdf = async (
       const blockRectYStart = y + 2 // Add a small margin from previous content
 
       // Draw the background rectangle with the precise calculated height
-      doc.setFillColor(230, 242, 255) // Very light blue color (RGB values)
-      doc.rect(x1, blockRectYStart, totalW, totalInterpretationBlockHeight, "F") // "F" means Fill only (no border)
+      // doc.setFillColor(230, 242, 255) // Very light blue color (RGB values)
+      // doc.rect(x1, blockRectYStart, totalW, totalInterpretationBlockHeight, "F") // "F" means Fill only (no border)
 
       // Render the HTML content inside the precisely sized rectangle
       doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0) // Reset base styles

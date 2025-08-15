@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { 
   Home, UserPlus, Users, FlaskConical, Package, Settings, LogOut, Stethoscope, ChevronLeft, ChevronRight
 } from 'lucide-react'
@@ -15,6 +14,8 @@ import { supabase } from '@/lib/supabase'
 const sidebarItems = [
   { icon: Home, label: 'Dashboard', href: '/dashboard', roles: ['admin', 'technician', 'phlebo'] },
   { icon: UserPlus, label: 'Patient Entry', href: '/patient-entry', roles: ['admin', 'technician'] },
+  // New item added below
+  { icon: Stethoscope, label: 'X-ray Entry', href: '/x-ray', roles: ['admin', 'technician'] },
   { icon: Users, label: 'Patients', href: '/patients', roles: ['admin'] },
   { icon: Users, label: 'Deleted Entry', href: '/deleted', roles: ['admin'] },
   { icon: FlaskConical, label: 'Billing', href: '/billing', roles: ['admin'] },
@@ -146,7 +147,7 @@ export default function Sidebar() {
               
               return (
                 <li key={item.href}>
-                  <Link
+                  <a
                     href={item.href}
                     className={cn(
                       "flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
@@ -158,7 +159,7 @@ export default function Sidebar() {
                   >
                     <Icon className="w-5 h-5 flex-shrink-0" />
                     {!isCollapsed && <span>{item.label}</span>}
-                  </Link>
+                  </a>
                 </li>
               )
             })}
