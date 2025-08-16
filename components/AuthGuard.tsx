@@ -16,6 +16,7 @@ const roleAccessMap: Record<string, string[]> = {
   '/settings': ['admin', 'technician', 'phlebo'],
   '/x-ray': ['admin', 'xray'],
   '/x-rayDashboard': ['admin', 'xray'],
+  '/x-ray/[registrationId]': ['admin', 'xray'],
   '/billing': ['admin'],
   '/blood-values': ['admin'],
   '/download-report': ['admin'],
@@ -104,8 +105,8 @@ export default function AuthGuard({ children }: AuthGuardProps) {
 
     // Special handling for x-ray users
     if (role === 'xray') {
-      // X-ray users can only access x-ray and x-rayDashboard pages
-      if (pathname !== '/x-ray' && pathname !== '/x-rayDashboard') {
+      // X-ray users can only access x-ray related pages
+      if (!pathname.startsWith('/x-ray') && pathname !== '/x-rayDashboard') {
         router.replace('/x-rayDashboard');
         return;
       }
