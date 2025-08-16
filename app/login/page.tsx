@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { signIn } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -27,7 +28,26 @@ export default function LoginPage() {
 
     try {
       await signIn(loginEmail, password)
-      router.push('/dashboard')
+      
+      // Get user role after successful login
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: roleData } = await supabase
+          .from('user')
+          .select('role')
+          .eq('uid', user.id)
+          .single()
+        
+        // Redirect based on role
+        if (roleData?.role === 'xray') {
+          router.push('/x-rayDashboard')
+        } else {
+          router.push('/dashboard')
+        }
+      } else {
+        // Fallback to dashboard if role can't be determined
+        router.push('/dashboard')
+      }
     } catch (err: any) {
       setError(err.message || 'Login failed')
     } finally {

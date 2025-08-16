@@ -15,8 +15,8 @@ const sidebarItems = [
   { icon: Home, label: 'Dashboard', href: '/dashboard', roles: ['admin', 'technician', 'phlebo'] },
   { icon: UserPlus, label: 'Patient Entry', href: '/patient-entry', roles: ['admin', 'technician'] },
   // The correct icon for X-ray items is Stethoscope
-  { icon: Stethoscope, label: 'X-ray Entry', href: '/x-ray', roles: ['admin', 'technician'] },
-  { icon: Stethoscope, label: 'X-ray Dashboard', href: '/x-rayDashboard', roles: ['admin', 'technician'] },
+  { icon: Stethoscope, label: 'X-ray Entry', href: '/x-ray', roles: ['admin', 'xray'] },
+  { icon: Stethoscope, label: 'X-ray Dashboard', href: '/x-rayDashboard', roles: ['admin', 'xray'] },
   { icon: Users, label: 'Patients', href: '/patients', roles: ['admin'] },
   { icon: Users, label: 'Deleted Entry', href: '/deleted', roles: ['admin'] },
   { icon: FlaskConical, label: 'Billing', href: '/billing', roles: ['admin'] },

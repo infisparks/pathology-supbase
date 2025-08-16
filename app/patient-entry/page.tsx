@@ -13,6 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { UserCircle, Phone, Calendar, Clock, Plus, X, Search, Trash2 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { generatePatientIdWithSequence } from "@/lib/patient_id_generator"
+import { useRouter } from "next/navigation"
+import { useUserRole } from "@/hooks/useUserRole"
 
 /**
  * -----------------------------
@@ -123,7 +125,22 @@ interface PatientSuggestion {
  * -----------------------------
  */
 
-export default function PatientEntryForm() {
+export default function PatientEntry() {
+  // Role-based redirect for x-ray users
+  const router = useRouter()
+  const { role } = useUserRole()
+  
+  useEffect(() => {
+    if (role === 'xray') {
+      router.replace('/x-rayDashboard')
+    }
+  }, [role, router])
+
+  // If user is x-ray role, don't render content
+  if (role === 'xray') {
+    return null
+  }
+
   /** default date + time */
   const initialDate = useMemo(() => new Date(), [])
   const defaultDate = initialDate.toISOString().slice(0, 10)

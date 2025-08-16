@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
+import { useRouter } from "next/navigation"
 
 import { DashboardHeader } from "./components/dashboard-header"
 import { RegistrationList } from "./components/registration-list"
@@ -90,6 +91,19 @@ export default function Dashboard() {
 
   const [dbSearchResults, setDbSearchResults] = useState<Registration[] | null>(null)
   const [isDbSearchLoading, setIsDbSearchLoading] = useState(false)
+
+  // Role-based redirect for x-ray users
+  const router = useRouter()
+  useEffect(() => {
+    if (role === 'xray') {
+      router.replace('/x-rayDashboard')
+    }
+  }, [role, router])
+
+  // If user is x-ray role, don't render dashboard content
+  if (role === 'xray') {
+    return null
+  }
 
   /* --- helpers --- */
   useEffect(() => {

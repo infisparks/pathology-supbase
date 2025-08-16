@@ -14,6 +14,12 @@ const roleAccessMap: Record<string, string[]> = {
   '/blood-tests': ['admin'],
   '/packages': ['admin'],
   '/settings': ['admin', 'technician', 'phlebo'],
+  '/x-ray': ['admin', 'xray'],
+  '/x-rayDashboard': ['admin', 'xray'],
+  '/billing': ['admin'],
+  '/blood-values': ['admin'],
+  '/download-report': ['admin'],
+  '/edit-patient': ['admin'],
   // Add other routes as needed
 }
 
@@ -48,7 +54,12 @@ export default function AuthGuard({ children }: AuthGuardProps) {
           router.replace('/login');
           initialAuthRedirectHandled.current = true;
         } else if (currentUser && pathname === '/login') {
-          router.replace('/dashboard');
+          // Check user role and redirect accordingly
+          if (role === 'xray') {
+            router.replace('/x-rayDashboard');
+          } else {
+            router.replace('/dashboard');
+          }
           initialAuthRedirectHandled.current = true;
         }
       }
@@ -66,7 +77,12 @@ export default function AuthGuard({ children }: AuthGuardProps) {
           router.replace('/login');
           initialAuthRedirectHandled.current = true;
         } else if (currentUser && pathname === '/login') {
-          router.replace('/dashboard');
+          // Check user role and redirect accordingly
+          if (role === 'xray') {
+            router.replace('/x-rayDashboard');
+          } else {
+            router.replace('/dashboard');
+          }
           initialAuthRedirectHandled.current = true;
         }
       }
@@ -76,9 +92,9 @@ export default function AuthGuard({ children }: AuthGuardProps) {
       isMounted = false;
       subscription.unsubscribe(); // Unsubscribe from auth listener on cleanup
     };
-  }, [router, pathname]); // Dependencies are `router` and `pathname` for initial setup and listener context
+  }, [router, pathname, role]); // Added role dependency
 
-  // --- Effect 2: Handle role-based access control ---
+  // --- Effect 2: Handle role-based access control and x-ray user redirects ---
   useEffect(() => {
     // Only proceed if authentication and role data are fully loaded, and user is present.
     // Also, don't redirect if we are on the login page as it's not role-restricted.
@@ -86,11 +102,25 @@ export default function AuthGuard({ children }: AuthGuardProps) {
       return;
     }
 
+    // Special handling for x-ray users
+    if (role === 'xray') {
+      // X-ray users can only access x-ray and x-rayDashboard pages
+      if (pathname !== '/x-ray' && pathname !== '/x-rayDashboard') {
+        router.replace('/x-rayDashboard');
+        return;
+      }
+    }
+
     const allowedRoles = roleAccessMap[pathname];
 
     // If the current path has defined roles and the current user's role is not among them
     if (allowedRoles && role && !allowedRoles.includes(role)) {
-      router.replace('/dashboard'); // Redirect to dashboard if not authorized
+      // Redirect based on user role
+      if (role === 'xray') {
+        router.replace('/x-rayDashboard');
+      } else {
+        router.replace('/dashboard');
+      }
     }
   }, [role, roleLoading, user, pathname, router, loadingAuth]); // Dependencies ensure this effect re-runs when these values change
 
