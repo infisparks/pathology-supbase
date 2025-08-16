@@ -10,8 +10,14 @@ import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-// Import the new JSON data for examinations and prices
-import { xrayData } from "./index"
+import { xrayData } from "@/app/x-ray/index" // Assuming this file is in the same directory
+
+// This component will be a dynamic page that receives params
+interface XrayDetailPageProps {
+  params: {
+    registrationid: string
+  }
+}
 
 // Helper function for exponential backoff retry logic
 const withRetry = async <T,>(fn: () => Promise<any>, retries = 3, delay = 1000): Promise<any> => {
@@ -42,27 +48,82 @@ const procedurePriceMap = xrayData.procedure.reduce<Record<string, any>>((acc, i
 const regularExaminations = xrayData.xray_price_list.map((item) => item.examination)
 const procedureExaminations = xrayData.procedure.map((item) => item.name)
 
-// Main X-ray page component
-export default function XrayPage() {
-  const [formData, setFormData] = useState({
-    name: "",
-    phoneNumber: "",
-    gender: "", // New gender state
-    age: "",
-    ageUnit: "Years",
-    hospitalName: "MEDFORD HOSPITAL",
-    billNumber: "",
-    xrayTests: [{ examination: "", amount: 0, xrayVia: "Price" }],
-    totalAmount: 0,
-    discount: 0,
-    payments: [] as { amount: number; paymentMode: string }[],
-  })
+// Initial form state
+const initialFormData = {
+  name: "",
+  phoneNumber: "",
+  gender: "",
+  age: "",
+  ageUnit: "Years",
+  hospitalName: "MEDFORD HOSPITAL",
+  billNumber: "",
+  xrayTests: [{ examination: "", amount: 0, xrayVia: "Price" }],
+  totalAmount: 0,
+  discount: 0,
+  payments: [] as { amount: number; paymentMode: string }[],
+}
 
+export default function XrayDetailPage({ params }: XrayDetailPageProps) {
+  const [formData, setFormData] = useState(initialFormData)
+  const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState("")
   const [messageType, setMessageType] = useState("")
   const [searchTerms, setSearchTerms] = useState<Record<number, string>>({})
   const searchInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+
+  // Fetch data on initial load
+  useEffect(() => {
+    const fetchPatientData = async () => {
+      setLoading(true)
+      const registrationId = params.registrationid
+      if (!registrationId) {
+        setMessage("No registration ID provided.")
+        setMessageType("error")
+        setLoading(false)
+        return
+      }
+
+      const { data, error } = await withRetry(async () =>
+        supabase.from("x-raydetail").select("*").eq("id", registrationId).single(),
+      )
+
+      if (error || !data) {
+        console.error("Fetch error:", error)
+        setMessage(`Failed to fetch patient data: ${error?.message || "Patient not found."}`)
+        setMessageType("error")
+        setLoading(false)
+        return
+      }
+
+      // Format fetched data to fit the form state
+      const formattedData = {
+        name: data.name,
+        phoneNumber: data.number,
+        gender: data.gender || "",
+        age: data.age || "",
+        ageUnit: data.age_unit || "Years",
+        hospitalName: data.Hospital_name || "MEDFORD HOSPITAL",
+        billNumber: data.bill_number || "",
+        xrayTests: (data["x-ray_detail"] || []).map((test: any) => ({
+          examination: test.Examination,
+          amount: test.Amount,
+          xrayVia: test.Xray_Via === "N/A" ? "Price" : test.Xray_Via,
+        })),
+        totalAmount: data.amount_detail?.totalAmount || 0,
+        discount: data.amount_detail?.discount || 0,
+        payments: (data.amount_detail?.paymentHistory || []).map((payment: any) => ({
+          amount: payment.amount,
+          paymentMode: payment.paymentMode,
+        })),
+      }
+
+      setFormData(formattedData)
+      setLoading(false)
+    }
+
+    fetchPatientData()
+  }, [params.registrationid])
 
   // Calculate total amount whenever x-ray tests change
   useEffect(() => {
@@ -76,7 +137,7 @@ export default function XrayPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  // Check if examination is a procedure (HSG, IVP, BMFT, BM SWALLOW)
+  // Check if examination is a procedure
   const isProcedureExamination = (examination: string) => {
     return ["HSG", "IVP", "BMFT", "BM SWALLOW"].includes(examination)
   }
@@ -184,8 +245,8 @@ export default function XrayPage() {
   const totalPaid = formData.payments.reduce((sum, payment) => sum + (payment.amount || 0), 0)
   const remainingAmount = Math.max(0, formData.totalAmount - formData.discount - totalPaid)
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  // Handle form update
+  const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
     setMessage("")
@@ -211,10 +272,10 @@ export default function XrayPage() {
         }
       })
 
-      const dataToInsert = {
+      const dataToUpdate = {
         name: formData.name,
         number: formData.phoneNumber,
-        gender: formData.gender || null, // Storing gender data
+        gender: formData.gender || null,
         age: formData.age,
         age_unit: formData.ageUnit,
         Hospital_name: formData.hospitalName,
@@ -223,31 +284,17 @@ export default function XrayPage() {
         "x-ray_detail": xrayDetail,
       }
 
-      // Insert data into Supabase
-      const result = await withRetry(async () => await supabase.from("x-raydetail").insert(dataToInsert))
+      const result = await withRetry(async () =>
+        supabase.from("x-raydetail").update(dataToUpdate).eq("id", params.registrationid),
+      )
 
       if (result.error) {
-        console.error("Submission error:", result.error)
-        setMessage(`Failed to submit the form: ${result.error.message || "Unknown error"}`)
+        console.error("Update error:", result.error)
+        setMessage(`Failed to update the form: ${result.error.message || "Unknown error"}`)
         setMessageType("error")
       } else {
-        setMessage("Form submitted successfully!")
+        setMessage("Form updated successfully!")
         setMessageType("success")
-        // Reset form
-        setFormData({
-          name: "",
-          phoneNumber: "",
-          gender: "",
-          age: "",
-          ageUnit: "Years",
-          hospitalName: "MEDFORD HOSPITAL",
-          billNumber: "",
-          xrayTests: [{ examination: "", amount: 0, xrayVia: "Price" }],
-          totalAmount: 0,
-          discount: 0,
-          payments: [],
-        })
-        setSearchTerms({})
       }
     } catch (err) {
       console.error("Unexpected error:", err)
@@ -258,14 +305,22 @@ export default function XrayPage() {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gray-100">
+        <p className="text-xl text-gray-700">Loading patient data...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 p-2 bg-gray-100 min-h-screen font-sans">
       <h1 className="text-3xl font-extrabold text-gray-900 mb-2 flex items-center">
         <Stethoscope className="mr-3 w-8 h-8 text-blue-600" />
-        X-ray Entry Portal
+        X-ray Update Portal
       </h1>
       <Card className="bg-white p-2 rounded-2xl shadow-xl border border-gray-200">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleUpdate}>
           {/* Personal Information Section */}
           <div className="mb-3 p-2 bg-blue-50 rounded-xl border border-blue-200">
             <h2 className="text-xl font-bold text-blue-800 mb-2 flex items-center">
@@ -400,7 +455,7 @@ export default function XrayPage() {
                 onClick={handleAddTest}
                 className="bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 py-2 text-sm font-semibold shadow-md transition-colors duration-200"
               >
-                <UserPlus className="mr-2 h-4 w-4" /> Add Test
+                <Plus className="mr-2 h-4 w-4" /> Add Test
               </Button>
             </div>
             {formData.xrayTests.map((test, index) => {
@@ -683,7 +738,7 @@ export default function XrayPage() {
               disabled={isSubmitting}
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg transition-transform duration-200 hover:scale-105 disabled:bg-gray-400"
             >
-              {isSubmitting ? "Submitting..." : "Submit Entry"}
+              {isSubmitting ? "Updating..." : "Update Registration"}
             </Button>
           </div>
         </form>
