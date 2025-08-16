@@ -83,19 +83,19 @@ export const downloadXrayBill = (data: any) => {
 
     drawRow("Name", nameLines, "Bill No.", data.bill_number || "N/A");
     drawRow("Age / Gender", `${data.age} ${data.age_unit} / ${data.gender || "N/A"}`, "Registration Date", new Date(data.created_at).toLocaleDateString());
-    drawRow("Hospital", data.Hospital_name || "N/A", "Contact", data.number || "N/A");
+    drawRow("Ref. Doctor", data.Refer_doctorname || "N/A", "Contact", data.number || "N/A");
 
     y += 4
 
     // X-ray Test Table
     autoTable(doc, {
-      head: [["Test Name", "Amount"]],
-      body: testDetails.map((test: any) => [test.Examination, test.Amount]), // Removed the '₹' symbol here
+      head: [["Test Name", "Service", "Amount"]],
+      body: testDetails.map((test: any) => [test.Examination, "X-RAY", test.Amount]), // Added Service column with "X-RAY" value
       startY: y,
       theme: "grid",
       styles: { font: "helvetica", fontSize: 11 },
       headStyles: { fillColor: [30, 79, 145], fontStyle: "bold" },
-      columnStyles: { 1: { fontStyle: "bold" } },
+      columnStyles: { 2: { fontStyle: "bold" } }, // Updated column index for Amount column
       margin: { left: margin, right: margin },
     })
     y = (doc as any).lastAutoTable.finalY + 10

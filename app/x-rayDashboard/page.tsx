@@ -520,8 +520,16 @@ export default function XrayDashboardPage() {
                       <span className="text-right">{`${modalData.age} ${modalData.age_unit}`}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="font-semibold">Hospital:</span>{" "}
-                      <span className="text-right">{modalData.Hospital_name}</span>
+                      <span className="font-semibold">Ref. Doctor:</span>{" "}
+                      <span className="text-right">{modalData.Refer_doctorname || "N/A"}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Visit Type:</span>{" "}
+                      <span className="text-right">{modalData.Visit_type || "N/A"}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">TPA:</span>{" "}
+                      <span className="text-right">{modalData.Tpa || "N/A"}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="font-semibold">Bill No.:</span>{" "}
@@ -563,6 +571,14 @@ export default function XrayDashboardPage() {
                         return <div className="text-center text-red-500 text-xs">Error loading test details</div>
                       }
                     })()}
+                    
+                    {/* Remark Section */}
+                    <div className="pt-3 border-t border-gray-200">
+                      <div className="flex justify-between items-start bg-blue-50 p-2 rounded-lg text-xs">
+                        <span className="font-semibold text-blue-800">Remark:</span>
+                        <span className="text-blue-700 max-w-xs text-right">{modalData.Remark || "N/A"}</span>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
 

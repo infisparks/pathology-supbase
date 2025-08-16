@@ -57,6 +57,10 @@ const initialFormData = {
   ageUnit: "Years",
   hospitalName: "MEDFORD HOSPITAL",
   billNumber: "",
+  doctorName: "", // New field for Doctor Name
+  visitType: "OPD", // New field for Visit Type with default OPD
+  tpa: "No", // New field for TPA with default No
+  remark: "", // New field for Remark
   xrayTests: [{ examination: "", amount: 0, xrayVia: "Price" }],
   totalAmount: 0,
   discount: 0,
@@ -105,6 +109,10 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
         ageUnit: data.age_unit || "Years",
         hospitalName: data.Hospital_name || "MEDFORD HOSPITAL",
         billNumber: data.bill_number || "",
+        doctorName: data.Refer_doctorname || "",
+        visitType: data.Visit_type || "OPD",
+        tpa: data.Tpa || "No",
+        remark: data.Remark || "",
         xrayTests: (data["x-ray_detail"] || []).map((test: any) => ({
           examination: test.Examination,
           amount: test.Amount,
@@ -280,6 +288,10 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
         age_unit: formData.ageUnit,
         Hospital_name: formData.hospitalName,
         bill_number: formData.billNumber || null,
+        Refer_doctorname: formData.doctorName || null,
+        Visit_type: formData.visitType,
+        Tpa: formData.tpa,
+        Remark: formData.remark || null,
         amount_detail: amountDetail,
         "x-ray_detail": xrayDetail,
       }
@@ -314,20 +326,20 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
   }
 
   return (
-    <div className="flex-1 p-2 bg-gray-100 min-h-screen font-sans">
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-2 flex items-center">
-        <Stethoscope className="mr-3 w-8 h-8 text-blue-600" />
+    <div className="flex-1 p-1 bg-gray-100 min-h-screen font-sans">
+      <h1 className="text-2xl font-extrabold text-gray-900 mb-1 flex items-center">
+        <Stethoscope className="mr-2 w-6 h-6 text-blue-600" />
         X-ray Update Portal
       </h1>
-      <Card className="bg-white p-2 rounded-2xl shadow-xl border border-gray-200">
+      <Card className="bg-white p-1 rounded-xl shadow-lg border border-gray-200">
         <form onSubmit={handleUpdate}>
           {/* Personal Information Section */}
-          <div className="mb-3 p-2 bg-blue-50 rounded-xl border border-blue-200">
-            <h2 className="text-xl font-bold text-blue-800 mb-2 flex items-center">
-              <UserPlus className="mr-2 w-5 h-5 text-blue-600" />
+          <div className="mb-2 p-1 bg-blue-50 rounded-lg border border-blue-200">
+            <h2 className="text-lg font-bold text-blue-800 mb-1 flex items-center">
+              <UserPlus className="mr-1 w-4 h-4 text-blue-600" />
               Patient Information
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1">
               <div className="flex flex-col">
                 <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor="name">
                   Patient Name
@@ -339,7 +351,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                   placeholder="Enter full name"
                   value={formData.name}
                   onChange={handleChange}
-                  className="p-2 border border-gray-300 rounded-lg focus-visible:ring-blue-500"
+                  className="p-1 border border-gray-300 rounded-md focus-visible:ring-blue-500"
                   required
                 />
               </div>
@@ -440,45 +452,109 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="flex flex-col">
+                <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor="doctorName">
+                  Doctor Name
+                </Label>
+                <Input
+                  type="text"
+                  name="doctorName"
+                  id="doctorName"
+                  placeholder="Refer by"
+                  value={formData.doctorName}
+                  onChange={handleChange}
+                  className="p-2 border border-gray-300 rounded-lg focus-visible:ring-blue-500"
+                />
+              </div>
+              <div className="flex flex-col">
+                <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor="visitType">
+                  Visit Type
+                </Label>
+                <Select
+                  value={formData.visitType}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, visitType: value }))}
+                >
+                  <SelectTrigger className="p-2 h-auto border border-gray-300 rounded-lg focus-visible:ring-blue-500">
+                    <SelectValue placeholder="Select visit type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="OPD">OPD</SelectItem>
+                    <SelectItem value="IPD">IPD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col">
+                <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor="tpa">
+                  TPA
+                </Label>
+                <Select
+                  value={formData.tpa}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, tpa: value }))}
+                >
+                  <SelectTrigger className="p-2 h-auto border border-gray-300 rounded-lg focus-visible:ring-blue-500">
+                    <SelectValue placeholder="Select TPA" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Yes">Yes</SelectItem>
+                    <SelectItem value="No">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
           {/* X-ray Test Section */}
-          <div className="mb-3 p-2 bg-green-50 rounded-xl border border-green-200">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-xl font-bold text-green-800 flex items-center">
-                <FlaskConical className="mr-2 w-5 h-5 text-green-600" />
+          <div className="mb-2 p-1 bg-green-50 rounded-lg border border-green-200">
+            <div className="flex justify-between items-center mb-1">
+              <h2 className="text-lg font-bold text-green-800 flex items-center">
+                <FlaskConical className="mr-1 w-4 h-4 text-green-600" />
                 X-ray Tests
               </h2>
               <Button
                 type="button"
                 onClick={handleAddTest}
-                className="bg-green-600 hover:bg-green-700 text-white rounded-lg px-3 py-2 text-sm font-semibold shadow-md transition-colors duration-200"
+                className="bg-green-600 hover:bg-green-700 text-white rounded-md px-2 py-1 text-xs font-semibold shadow-sm transition-colors duration-200"
               >
-                <Plus className="mr-2 h-4 w-4" /> Add Test
+                <Plus className="mr-1 h-3 w-3" /> Add Test
               </Button>
+            </div>
+
+            {/* Remark Field - Separate Box */}
+            <div className="mb-2 p-2 bg-white rounded-md shadow-sm border border-gray-200">
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">
+                Remark
+              </Label>
+              <Input
+                type="text"
+                name="remark"
+                id="remark"
+                placeholder="Enter any additional remarks"
+                value={formData.remark}
+                onChange={handleChange}
+                className="p-1 border border-gray-300 rounded-md focus-visible:ring-blue-500"
+              />
             </div>
             {formData.xrayTests.map((test, index) => {
               const filteredExams = getFilteredExaminations(index)
               return (
                 <div
                   key={index}
-                  className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-2 bg-white rounded-lg shadow-sm border border-gray-200 mt-2"
+                  className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1 p-1 bg-white rounded-md shadow-sm border border-gray-200 mt-1"
                 >
                   {formData.xrayTests.length > 1 && (
                     <Button
                       type="button"
                       onClick={() => handleRemoveTest(index)}
-                      className="absolute top-2 right-2 p-1 h-6 w-6 text-red-500 hover:bg-red-100"
+                      className="absolute top-1 right-1 p-1 h-5 w-5 text-red-500 hover:bg-red-100"
                       variant="ghost"
                       title="Remove Test"
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-2 h-2" />
                     </Button>
                   )}
                   {/* Examination Dropdown */}
                   <div className="flex flex-col">
-                    <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor={`examination-${index}`}>
+                    <Label className="text-xs font-semibold text-gray-700 mb-1" htmlFor={`examination-${index}`}>
                       Examination
                     </Label>
                     <Select
@@ -607,29 +683,29 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
             })}
           </div>
 
-          <div className="mb-3 p-2 bg-indigo-50 rounded-xl border border-indigo-200">
-            <h2 className="text-xl font-bold text-indigo-800 mb-2 flex items-center">
-              <FlaskConical className="mr-2 w-5 h-5 text-indigo-600" />
+          <div className="mb-2 p-1 bg-indigo-50 rounded-lg border border-indigo-200">
+            <h2 className="text-lg font-bold text-indigo-800 mb-1 flex items-center">
+              <FlaskConical className="mr-1 w-4 h-4 text-indigo-600" />
               Payment Details
             </h2>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
               {/* Payment Detail Box */}
-              <div className="bg-white p-2 rounded-xl border border-gray-200 shadow-sm">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-semibold text-gray-800">Payment Detail</h3>
+              <div className="bg-white p-1 rounded-lg border border-gray-200 shadow-sm">
+                <div className="flex justify-between items-center mb-1">
+                  <h3 className="text-base font-semibold text-gray-800">Payment Detail</h3>
                   <Button
                     type="button"
                     onClick={handleAddPayment}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-3 py-2 text-sm font-semibold shadow-md transition-colors duration-200"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-md px-2 py-1 text-xs font-semibold shadow-sm transition-colors duration-200"
                   >
-                    <Plus className="mr-2 h-4 w-4" /> Add Payment
+                    <Plus className="mr-1 h-3 w-3" /> Add Payment
                   </Button>
                 </div>
 
                 {/* Discount Field */}
-                <div className="mb-2">
-                  <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor="discount">
+                <div className="mb-1">
+                  <Label className="text-xs font-semibold text-gray-700 mb-1" htmlFor="discount">
                     Discount
                   </Label>
                   <Input
@@ -638,7 +714,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                     id="discount"
                     value={formData.discount}
                     onChange={handleChange}
-                    className="p-2 border border-gray-300 rounded-lg focus-visible:ring-blue-500"
+                    className="p-1 border border-gray-300 rounded-md focus-visible:ring-blue-500"
                     placeholder="Enter discount amount"
                   />
                 </div>
@@ -647,31 +723,31 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                 {formData.payments.map((payment, index) => (
                   <div
                     key={index}
-                    className="relative grid grid-cols-1 md:grid-cols-2 gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200 mb-2"
+                    className="relative grid grid-cols-1 md:grid-cols-2 gap-1 p-1 bg-gray-50 rounded-md border border-gray-200 mb-1"
                   >
                     <Button
                       type="button"
                       onClick={() => handleRemovePayment(index)}
-                      className="absolute top-1 right-1 p-1 h-5 w-5 text-red-500 hover:bg-red-100"
+                      className="absolute top-1 right-1 p-1 h-4 w-4 text-red-500 hover:bg-red-100"
                       variant="ghost"
                       title="Remove Payment"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-2 h-2" />
                     </Button>
 
                     <div className="flex flex-col">
-                      <Label className="text-sm font-semibold text-gray-700 mb-1">Amount</Label>
+                      <Label className="text-xs font-semibold text-gray-700 mb-1">Amount</Label>
                       <Input
                         type="number"
                         value={payment.amount}
                         onChange={(e) => handlePaymentChange(index, "amount", e.target.value)}
-                        className="p-2 border border-gray-300 rounded-lg focus-visible:ring-blue-500"
+                        className="p-1 border border-gray-300 rounded-md focus-visible:ring-blue-500"
                         placeholder="Enter amount"
                       />
                     </div>
 
                     <div className="flex flex-col">
-                      <Label className="text-sm font-semibold text-gray-700 mb-1">Mode</Label>
+                      <Label className="text-xs font-semibold text-gray-700 mb-1">Mode</Label>
                       <Select
                         value={payment.paymentMode}
                         onValueChange={(value) => handlePaymentChange(index, "paymentMode", value)}
@@ -690,28 +766,28 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
               </div>
 
               {/* Payment Summary Box */}
-              <div className="bg-white p-2 rounded-xl border border-gray-200 shadow-sm">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Payment Summary</h3>
+              <div className="bg-white p-1 rounded-lg border border-gray-200 shadow-sm">
+                <h3 className="text-base font-semibold text-gray-800 mb-1">Payment Summary</h3>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                    <span className="text-sm font-medium text-gray-600">Total Amount:</span>
-                    <span className="text-sm font-semibold text-gray-900">₹{formData.totalAmount}</span>
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="text-xs font-medium text-gray-600">Total Amount:</span>
+                    <span className="text-xs font-semibold text-gray-900">₹{formData.totalAmount}</span>
                   </div>
 
-                  <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                    <span className="text-sm font-medium text-gray-600">Discount:</span>
-                    <span className="text-sm font-semibold text-gray-900">₹{formData.discount}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="text-xs font-medium text-gray-600">Discount:</span>
+                    <span className="text-xs font-semibold text-gray-900">₹{formData.discount}</span>
                   </div>
 
-                  <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                    <span className="text-sm font-medium text-gray-600">Total Paid:</span>
-                    <span className="text-sm font-semibold text-gray-900">₹{totalPaid}</span>
+                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                    <span className="text-xs font-medium text-gray-600">Total Paid:</span>
+                    <span className="text-xs font-semibold text-gray-900">₹{totalPaid}</span>
                   </div>
 
-                  <div className="flex justify-between items-center py-2 border-b-2 border-gray-300">
-                    <span className="text-sm font-medium text-gray-600">Remaining Amount:</span>
-                    <span className={`text-sm font-bold ${remainingAmount > 0 ? "text-red-600" : "text-green-600"}`}>
+                  <div className="flex justify-between items-center py-1 border-b-2 border-gray-300">
+                    <span className="text-xs font-medium text-gray-600">Remaining Amount:</span>
+                    <span className={`text-xs font-bold ${remainingAmount > 0 ? "text-red-600" : "text-green-600"}`}>
                       ₹{remainingAmount}
                     </span>
                   </div>
@@ -724,7 +800,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
           {message && (
             <div
               className={cn(
-                "p-2 mb-2 rounded-lg font-medium",
+                "p-1 mb-1 rounded-md font-medium",
                 messageType === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700",
               )}
             >
@@ -736,7 +812,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded-full shadow-lg transition-transform duration-200 hover:scale-105 disabled:bg-gray-400"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-6 rounded-full shadow-md transition-transform duration-200 hover:scale-105 disabled:bg-gray-400"
             >
               {isSubmitting ? "Updating..." : "Update Registration"}
             </Button>
