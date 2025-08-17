@@ -27,6 +27,9 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog" // Import Dialog components
+import { generateReportPdf } from "@/app/download-report/[registrationId]/pdf-generator" // Import PDF generator
+import type { PatientData, CombinedTestGroup, HistoricalTestEntry, ComparisonTestSelection } from "@/app/download-report/[registrationId]/types/report" // Import types
 
 /* ─────────────────── Types ─────────────────── */
 
@@ -179,6 +182,9 @@ const BloodValuesForm: React.FC = () => {
     name: string
     day_type: string
   } | null>(null)
+  const [showPreviewModal, setShowPreviewModal] = useState(false) // State for preview modal
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null) // State for PDF blob URL
+  const [fullPatientData, setFullPatientData] = useState<PatientData | null>(null) // Store full patient data for report generation
 
   const {
     handleSubmit,
@@ -210,7 +216,14 @@ const BloodValuesForm: React.FC = () => {
       try {
         const { data: registrationData, error: registrationError } = await supabase
           .from("registration")
-          .select("patient_id, bloodtest_data, bloodtest_detail")
+          .select(
+            `
+          *,
+          patientdetial (
+            id, name, age, gender, patient_id, number, total_day, title, day_type
+          )
+        `,
+          )
           .eq("id", registrationId)
           .single()
         if (registrationError || !registrationData) {
@@ -223,29 +236,18 @@ const BloodValuesForm: React.FC = () => {
         const bookedTests = registrationData.bloodtest_data || []
         const storedBloodtestDetail = registrationData.bloodtest_detail || {}
 
-        const { data: patientData, error: patientError } = await supabase
-          .from("patientdetial")
-          .select("id, age, gender, patient_id, name, day_type")
-          .eq("id", patientId)
-          .single()
-        if (patientError || !patientData) {
-          console.error("Error fetching patient details:", patientError)
-          setLoading(false)
-          return
-        }
-
         setPatientDetails({
-          id: patientData.id,
-          age: patientData.age,
-          gender: patientData.gender,
-          patientId: patientData.patient_id,
-          name: patientData.name,
-          day_type: patientData.day_type,
+          id: registrationData.patientdetial.id,
+          age: registrationData.patientdetial.age,
+          gender: registrationData.patientdetial.gender,
+          patientId: registrationData.patientdetial.patient_id,
+          name: registrationData.patientdetial.name,
+          day_type: registrationData.patientdetial.day_type,
         })
 
         // Calculate age in days based on day_type
-        let ageDays = patientData.age
-        switch (patientData.day_type?.toLowerCase()) {
+        let ageDays = registrationData.patientdetial.age
+        switch (registrationData.patientdetial.day_type?.toLowerCase()) {
           case "year":
             ageDays *= 365
             break
@@ -257,15 +259,54 @@ const BloodValuesForm: React.FC = () => {
             break
           default:
             console.warn(
-              `Unknown patient day_type: ${patientData.day_type}. Assuming years.`,
+              `Unknown patient day_type: ${registrationData.patientdetial.day_type}. Assuming years.`,
             )
             ageDays *= 365
             break
         }
-        const genderKey = patientData.gender?.toLowerCase() === "male" ? "male" : "female"
+        const genderKey = registrationData.patientdetial.gender?.toLowerCase() === "male" ? "male" : "female"
         
         // Debug logging for age calculation
-        console.log(`Patient age: ${patientData.age} ${patientData.day_type}, calculated age in days: ${ageDays}`)
+        console.log(`Patient age: ${registrationData.patientdetial.age} ${registrationData.patientdetial.day_type}, calculated age in days: ${ageDays}`)
+
+        // Fetch interpretation data from blood_test table based on test_name
+        const originalTestNames = (bookedTests || []).map((t: any) => t.testName);
+        const { data: bloodTests, error: bloodTestError } = await supabase
+          .from("blood_test")
+          .select(`id, test_name, interpretation`)
+          .in('test_name', originalTestNames);
+
+        if (bloodTestError) {
+          console.error("Blood test interpretation fetch error:", bloodTestError);
+          throw new Error(`Failed to fetch blood tests: ${bloodTestError.message}`);
+        }
+
+        const testInterpretations: Record<string, string> = {};
+        bloodTests.forEach((test: any) => {
+          const slug = test.test_name.toLowerCase().replace(/\s+/g, "_").replace(/[.#$[\]()]/g, "");
+          testInterpretations[slug] = test.interpretation || "";
+        });
+
+        // Define mappedPatientData here, before it's used
+        const patientdetial = registrationData.patientdetial as any;
+        const mappedPatientData: PatientData = {
+          id: patientdetial.id,
+          name: patientdetial.name,
+          age: patientdetial.age,
+          gender: patientdetial.gender,
+          patientId: patientdetial.patient_id,
+          contact: patientdetial.number,
+          total_day: patientdetial.total_day,
+          day_type: patientdetial.day_type,
+          title: patientdetial.title,
+          hospitalName: registrationData.hospital_name,
+          registration_id: registrationData.id,
+          createdAt: registrationData.registration_time,
+          sampleCollectedAt: registrationData.samplecollected_time,
+          bloodtest_data: bookedTests,
+          bloodtest_detail: storedBloodtestDetail,
+          doctorName: registrationData.doctor_name,
+        };
 
         const tests: TestValueEntry[] = await Promise.all(
           bookedTests.map(async (bt: any) => {
@@ -365,6 +406,29 @@ const BloodValuesForm: React.FC = () => {
             } as TestValueEntry
           }),
         )
+
+        const mappedBloodtestDetail: Record<string, any> = {};
+        for (const t of tests) {
+          const key = t.testName
+            .toLowerCase()
+            .replace(/\s+/g, "_")
+            .replace(/[.#$[\]]/g, "");
+          mappedBloodtestDetail[key] = {
+            parameters: t.parameters,
+            subheadings: t.subheadings || [],
+            reportedOn: storedBloodtestDetail[key]?.reportedOn || new Date().toISOString(),
+            enteredBy: storedBloodtestDetail[key]?.enteredBy || "",
+            testId: t.testId,
+            testName: t.testName,
+            interpretation: testInterpretations[key] || "", // Add interpretation
+          };
+        }
+
+        setFullPatientData({
+          ...mappedPatientData,
+          bloodtest: mappedBloodtestDetail, // Use the updated mappedBloodtestDetail
+        })
+
         reset({ registrationId, tests })
       } catch (e) {
         console.error("Error in fetching data for form:", e)
@@ -602,6 +666,35 @@ const BloodValuesForm: React.FC = () => {
     }
   }
 
+  /* ══════════════ Preview Function ══════════════ */
+  const handlePreview = async () => {
+    if (!fullPatientData) {
+      alert("Patient data not loaded yet. Please wait.")
+      return
+    }
+
+    try {
+      const blob = await generateReportPdf(
+        fullPatientData,
+        Object.keys(fullPatientData.bloodtest || {}), // Include all tests for preview
+        [], // No combined groups for a simple preview
+        {}, // No historical data for a simple preview
+        {}, // No comparison selections for a simple preview
+        "normal", // Always normal report for this preview
+        true, // Always include letterhead for this preview
+        true, // Always skip cover for preview
+        undefined, // No AI suggestions for preview
+        false, // Do not include AI suggestions page
+      )
+      const url = URL.createObjectURL(blob)
+      setPdfUrl(url)
+      setShowPreviewModal(true)
+    } catch (error) {
+      console.error("Error generating preview:", error)
+      alert("Failed to generate report preview.")
+    }
+  }
+
   /* ── Early returns for missing registrationId or loading ── */
   if (!registrationId)
     return (
@@ -801,6 +894,29 @@ const BloodValuesForm: React.FC = () => {
                     </>
                   )}
                 </Button>
+                <Button type="button" onClick={handlePreview} className="flex-1 py-1.5 text-base bg-gray-600 hover:bg-gray-700">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4 mr-1.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                    />
+                  </svg>
+                  Preview Report
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -832,6 +948,26 @@ const BloodValuesForm: React.FC = () => {
           )}
         </Card>
       </div>
+      {showPreviewModal && pdfUrl && (
+        <Dialog open={showPreviewModal} onOpenChange={setShowPreviewModal}>
+          <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Report Preview</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-hidden">
+              <iframe src={pdfUrl} className="w-full h-full" />
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => setShowPreviewModal(false)}>Close</Button>
+              <Button onClick={() => {
+                URL.revokeObjectURL(pdfUrl);
+                setPdfUrl(null);
+                setShowPreviewModal(false);
+              }}>Close and Clear</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </TooltipProvider>
   )
 }

@@ -21,6 +21,9 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Search, Plus, Edit } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog" // Import Dialog components
+import { generateReportPdf } from "@/app/download-report/[registrationId]/pdf-generator" // Import PDF generator
+import type { PatientData, BloodTestData } from "@/app/download-report/[registrationId]/types/report" // Import types
 
 // ------------------------------------------------------------------
 // INTERFACES
@@ -30,7 +33,7 @@ export interface AgeRangeItem {
   rangeValue: string
 }
 
-export interface Parameter {
+export interface BloodTestParameter {
   name: string
   unit: string
   valueType: "text" | "number"
@@ -47,7 +50,7 @@ export interface Parameter {
   }[]
 }
 
-export interface Subheading {
+export interface BloodTestSubheading {
   title: string
   parameterNames: { name: string }[] // Changed from string[] to { name: string }[]
   is100?: boolean // Added this line for the new property
@@ -57,9 +60,10 @@ export interface BloodTestFormInputs {
   testName: string
   price: number
   tpa_price?: number // Optional TPA price
-  parameters: Parameter[]
-  subheadings: Subheading[]
+  parameters: BloodTestParameter[]
+  subheadings: BloodTestSubheading[]
   isOutsource?: boolean
+  interpretation?: string // Add this line for interpretation
 }
 
 // TestData interface for Supabase, mapping to table columns
@@ -69,8 +73,9 @@ export interface TestData {
   price: number
   tpa_price?: number // Optional TPA price
   isOutsource: boolean // Maps to outsource
-  parameters: Parameter[] // Maps to parameter (json)
-  subheadings: Subheading[] // Maps to sub_heading (json)
+  parameters: BloodTestParameter[] // Maps to parameter (json)
+  subheadings: BloodTestSubheading[] // Maps to sub_heading (json)
+  interpretation?: string // Add this line for interpretation
   created_at: string // Supabase column name
 }
 
@@ -477,6 +482,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
               is100: sh.is100 || false, // Default to false if not present
             })),
             isOutsource: testData.isOutsource || false,
+            interpretation: testData.interpretation || "", // Default to empty string if not present
           }
         : {
             testName: "",
@@ -498,6 +504,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
             ],
             subheadings: [],
             isOutsource: false,
+            interpretation: "", // Default to empty string for new test
           },
     [testData],
   )
@@ -515,6 +522,13 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
   const paramFields = useFieldArray({ control, name: "parameters" })
   const subheadingFields = useFieldArray({ control, name: "subheadings" })
 
+  // State for PDF preview
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+
+  // Interpretation error
+  const interpretationErr = getFieldErrorMessage(errors, ["interpretation"]);
+
   useEffect(() => {
     console.log("TestModal: paramFields.fields.length changed:", paramFields.fields.length)
     if (paramFields.fields.length === 0) {
@@ -522,6 +536,99 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
       console.log("TestModal: Setting isOutsource to true because no parameters.")
     }
   }, [paramFields.fields.length, setValue])
+
+  // Function to generate preview PDF
+  const generatePreviewPdf = async () => {
+    const currentFormData = getValues(); // Get current form data
+
+    // Define simplified types for parameters and subheadings to avoid import conflicts
+    interface PreviewParameter {
+      name: string;
+      unit: string;
+      value: string | number;
+      range: string;
+      formula?: string;
+      iscomment?: boolean;
+      valueType?: "text" | "number";
+    }
+
+    interface PreviewSubheading {
+      title: string;
+      parameterNames: string[];
+      is100?: boolean;
+    }
+
+    // Construct dummy PatientData based on current form structure
+    const dummyParameters: PreviewParameter[] = currentFormData.parameters.map(p => ({
+      name: p.name,
+      unit: p.unit,
+      value: p.valueType === "number" ? 1 : "Dummy Text Value", // Dummy value
+      range: Array.isArray(p.range.male) && p.range.male.length > 0 ? p.range.male[0].rangeValue : "", // Use first male range as dummy
+      formula: p.formula,
+      iscomment: p.iscomment,
+      valueType: p.valueType,
+    }));
+
+    const dummySubheadings: PreviewSubheading[] = currentFormData.subheadings.map(sh => ({
+      title: sh.title,
+      parameterNames: sh.parameterNames.map((pn: { name: string }) => pn.name), // Extract only name strings
+      is100: sh.is100,
+    }));
+
+    const dummyBloodtestDetail: Record<string, BloodTestData> = {
+      [currentFormData.testName.toLowerCase().replace(/\s+/g, "_").replace(/[.#$[\]()]/g, "").replace(/\//g, "")]: {
+        testId: "dummy-id",
+        parameters: dummyParameters as any, // Cast to any to bypass strict type checking temporarily
+        subheadings: dummySubheadings as any, // Cast to any to bypass strict type checking temporarily
+        reportedOn: new Date().toISOString(),
+        enteredBy: "Dummy User",
+        type: currentFormData.isOutsource ? "outsource" : "inhouse",
+        descriptions: [],
+        interpretation: currentFormData.interpretation || "Dummy interpretation for " + currentFormData.testName, // Include dummy interpretation
+      }
+    };
+
+    const dummyPatientData: PatientData = {
+      id: 1, // Dummy ID
+      name: "Dummy Patient",
+      age: 30,
+      gender: "Male",
+      patientId: "DP-001",
+      contact: "1234567890",
+      total_day: "30",
+      day_type: "day",
+      title: "Mr.",
+      doctorName: "Dr. Dummy",
+      hospitalName: "Dummy Hospital",
+      registration_id: 101,
+      createdAt: new Date().toISOString(),
+      sampleCollectedAt: new Date().toISOString(),
+      bloodtest_data: [{ testId: "dummy-id", testName: currentFormData.testName, price: currentFormData.price, testType: currentFormData.isOutsource ? "outsource" : "inhouse" }],
+      bloodtest_detail: dummyBloodtestDetail,
+      bloodtest: dummyBloodtestDetail,
+    };
+
+    try {
+      const blob = await generateReportPdf(
+        dummyPatientData,
+        Object.keys(dummyPatientData.bloodtest || {}), // Include all tests for preview
+        [], // No combined groups for a simple preview
+        {}, // No historical data for a simple preview
+        {}, // No comparison selections for a simple preview
+        "normal", // Always normal report for this preview
+        true, // Always include letterhead for this preview
+        true, // Always skip cover for preview
+        undefined, // No AI suggestions for preview
+        false, // Do not include AI suggestions page
+      );
+      const url = URL.createObjectURL(blob);
+      setPdfUrl(url);
+      setShowPreviewModal(true);
+    } catch (error) {
+      console.error("Error generating preview PDF:", error);
+      alert("Failed to generate preview.");
+    }
+  };
 
   const testNameErr = getFieldErrorMessage(errors, ["testName"])
   const testPriceErr = getFieldErrorMessage(errors, ["price"])
@@ -542,14 +649,16 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
       const payload: any = {
         test_name: data.testName,
         price: data.price,
+        tpa_price: data.tpa_price,
         outsource: data.isOutsource,
         parameter: data.parameters,
-        sub_heading: data.subheadings.map((sh) => ({
+        sub_heading: data.subheadings.map((sh: BloodTestSubheading) => ({
           // Transform back to string[] for Supabase
           title: sh.title,
-          parameterNames: sh.parameterNames.map((p) => p.name),
+          parameterNames: sh.parameterNames.map((p: { name: string }) => p.name), // Explicitly type p
           is100: sh.is100, // Include is100 when saving
         })),
+        interpretation: data.interpretation, // Include interpretation
       }
       if (data.tpa_price !== undefined && data.tpa_price !== null) { // FIX APPLIED HERE
         payload.tpa_price = data.tpa_price
@@ -608,15 +717,17 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
       const transformedSubheadings = parsed.subheadings.map((sh: any) => ({
         title: sh.title,
         parameterNames: sh.parameterNames.map((p: any) => p.name),
-        is100: sh.is100 === "true" || sh.is100 === true, // Convert string "true" to boolean true
+        is100: parsed.is100 === "true" || parsed.is100 === true, // Convert string "true" to boolean true
       }))
 
       const payload: any = {
         test_name: parsed.testName,
         price: parsed.price,
+        tpa_price: parsed.tpa_price,
         outsource: parsed.isOutsource,
         parameter: parsed.parameters,
         sub_heading: transformedSubheadings,
+        interpretation: parsed.interpretation, // Include interpretation
       }
       if (parsed.tpa_price !== undefined && parsed.tpa_price !== null) { // FIX APPLIED HERE
         payload.tpa_price = parsed.tpa_price
@@ -718,6 +829,13 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
               <FaCopy className="mr-1" /> Copy JSON
             </button>
           )}
+          <button
+            type="button"
+            onClick={generatePreviewPdf}
+            className="inline-flex items-center px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 ml-2"
+          >
+            <FaCode className="mr-1" /> Preview Report
+          </button>
         </div>
 
         {isJsonEditor ? (
@@ -801,7 +919,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
                   index={idx}
                   control={control}
                   register={register}
-                  errors={errors as FieldErrorsImpl<any>}
+                  errors={errors as FieldErrorsImpl<BloodTestFormInputs>}
                   remove={paramFields.remove}
                 />
               ))}
@@ -819,7 +937,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
                       female: [{ rangeKey: "", rangeValue: "" }],
                     },
                     suggestions: [],
-                  })
+                  } as BloodTestParameter) // Cast to BloodTestParameter
                 }
                 className="mt-2 inline-flex items-center px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
               >
@@ -837,7 +955,7 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
                     index={idx}
                     control={control}
                     register={register}
-                    errors={errors as FieldErrorsImpl<any>}
+                    errors={errors as FieldErrorsImpl<BloodTestFormInputs>}
                     remove={subheadingFields.remove}
                     getValues={getValues}
                     setValue={setValue}
@@ -846,34 +964,23 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
               </div>
               <button
                 type="button"
-                onClick={() => subheadingFields.append({ title: "", parameterNames: [], is100: false })}
+                onClick={() => subheadingFields.append({ title: "", parameterNames: [], is100: false } as BloodTestSubheading)} // Cast to BloodTestSubheading
                 className="mt-2 inline-flex items-center px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50"
               >
                 <FaPlus className="mr-1" /> Add Subheading
               </button>
             </div>
 
-            {/* Descriptions (if you add this column to Supabase) */}
-            {/* <div>
-              <label className="block text-sm font-medium">Test Descriptions</label>
-              {descFields.fields.map((field, dIdx) => (
-                <DescriptionEditor
-                  key={field.id}
-                  index={dIdx}
-                  control={control}
-                  register={register}
-                  errors={errors as FieldErrorsImpl<any>}
-                  remove={descFields.remove}
-                />
-              ))}
-              <button
-                type="button"
-                onClick={() => descFields.append({ heading: "", content: "" })}
-                className="mt-2 inline-flex items-center px-3 py-1 border border-green-600 text-green-600 rounded hover:bg-green-50"
-              >
-                <FaPlusCircle className="mr-1" /> Add Description
-              </button>
-            </div> */}
+            {/* Interpretation */}
+            <div>
+              <label className="block text-sm font-medium">Interpretation</label>
+              <textarea
+                {...register("interpretation")}
+                className="w-full border rounded px-3 py-2 h-24"
+                placeholder="Enter test interpretation or remarks..."
+              ></textarea>
+              {interpretationErr && <p className="text-red-500 text-xs">{interpretationErr}</p>}
+            </div>
 
             {/* Save / delete */}
             <div className="flex justify-between items-center mt-4">
@@ -897,6 +1004,32 @@ const TestModal: React.FC<TestModalProps> = ({ testData, onClose, onTestUpdated 
           </form>
         )}
       </div>
+      {showPreviewModal && <Dialog open={showPreviewModal} onOpenChange={setShowPreviewModal}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Report Preview</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            {pdfUrl ? (
+              <iframe src={pdfUrl} className="w-full h-full" />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500">Loading preview...</div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPreviewModal(false);
+                if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+                setPdfUrl(null);
+              }}
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>}
     </div>
   )
 }
@@ -934,7 +1067,7 @@ export default function BloodTestsPage() {
     try {
       const { data, error } = await supabase
         .from("blood_test")
-        .select("id, test_name, price, tpa_price, outsource, parameter, sub_heading, created_at") // Columns based on your schema
+        .select("id, test_name, price, tpa_price, outsource, parameter, sub_heading, created_at, interpretation") // Columns based on your schema
         .order("test_name")
 
       if (error) {
@@ -958,6 +1091,7 @@ export default function BloodTestsPage() {
           parameterNames: (sh.parameterNames || []).map((name: string) => ({ name })),
           is100: sh.is100 === true || sh.is100 === "true", // Ensure boolean conversion
         })),
+        interpretation: item.interpretation || undefined, // Include interpretation
         created_at: item.created_at,
       }))
 
