@@ -109,11 +109,31 @@ const parseRange = (rangeStr: string): { min?: number; max?: number } => {
   return {}
 }
 
-const parseRangeKey = (key: string) => {
-  const unit = key.trim().slice(-1)
+const parseRangeKey = (key: string): { lower: number; upper: number } => {
+  const unit = key.trim().slice(-1).toLowerCase()
   const [l, u] = key.slice(0, -1).split("-").map(Number)
-  const mul = unit === "y" ? 365 : unit === "m" ? 30 : 1
-  return { lower: l * mul, upper: u * mul }
+
+  let lowerDays = l
+  let upperDays = u
+
+  switch (unit) {
+    case "y":
+      lowerDays = l * 365
+      upperDays = u * 365
+      break
+    case "m":
+      lowerDays = l * 30
+      upperDays = u * 30
+      break
+    case "d":
+      // Already in days, no conversion needed
+      break
+    default:
+      // Default to days if no unit or unknown unit
+      console.warn(`Unknown age unit: ${unit} in rangeKey: ${key}. Assuming days.`)
+      break
+  }
+  return { lower: lowerDays, upper: upperDays }
 }
 
 /* ---- Helper to format numbers with up to 3 decimals, dropping trailing zeros ---- */
@@ -224,7 +244,24 @@ const BloodValuesForm: React.FC = () => {
         })
 
         // Calculate age in days based on day_type
-        const ageDays = patientData.day_type?.toLowerCase() === "day" ? patientData.age : patientData.age * 365
+        let ageDays = patientData.age
+        switch (patientData.day_type?.toLowerCase()) {
+          case "year":
+            ageDays *= 365
+            break
+          case "month":
+            ageDays *= 30
+            break
+          case "day":
+            // Already in days, no conversion needed
+            break
+          default:
+            console.warn(
+              `Unknown patient day_type: ${patientData.day_type}. Assuming years.`,
+            )
+            ageDays *= 365
+            break
+        }
         const genderKey = patientData.gender?.toLowerCase() === "male" ? "male" : "female"
         
         // Debug logging for age calculation
