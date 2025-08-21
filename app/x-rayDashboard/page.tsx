@@ -61,6 +61,7 @@ export default function XrayDashboardPage() {
     to: format(new Date(), "yyyy-MM-dd"),
   })
   const [quickDateRange, setQuickDateRange] = useState("Today")
+  const [hospitalFilter, setHospitalFilter] = useState("All")
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [modalData, setModalData] = useState<any | null>(null)
@@ -107,6 +108,12 @@ export default function XrayDashboardPage() {
       return nameMatch || contactMatch || billMatch
     })
 
+    if (hospitalFilter !== "All") {
+      updatedData = updatedData.filter((item) => {
+        return item.Hospital_name === hospitalFilter
+      })
+    }
+
     // Date range filter
     const fromDate = dateRange.from ? parseISO(dateRange.from) : null
     const toDate = dateRange.to ? parseISO(dateRange.to) : null
@@ -120,7 +127,7 @@ export default function XrayDashboardPage() {
     })
 
     setFilteredData(updatedData)
-  }, [searchTerm, quickDateRange, dateRange, tableData])
+  }, [searchTerm, quickDateRange, dateRange, hospitalFilter, tableData])
 
   const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -297,6 +304,21 @@ export default function XrayDashboardPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             </div>
             <div className="relative w-full sm:w-auto">
+              <Select value={hospitalFilter} onValueChange={setHospitalFilter}>
+                <SelectTrigger className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus-visible:ring-blue-500 w-full text-sm">
+                  <SelectValue placeholder="Hospital Filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Hospitals</SelectItem>
+                  <SelectItem value="MEDFORD HOSPITAL">MEDFORD HOSPITAL</SelectItem>
+                  <SelectItem value="Gautami Medford NX Hospital">Gautami Medford NX Hospital</SelectItem>
+                  <SelectItem value="Apex Clinic">Apex Clinic</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            </div>
+            <div className="relative w-full sm:w-auto">
               <Select value={quickDateRange} onValueChange={handleQuickDateRangeChange}>
                 <SelectTrigger className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus-visible:ring-blue-500 w-full text-sm">
                   <SelectValue placeholder="Quick Date Range" />
@@ -346,7 +368,9 @@ export default function XrayDashboardPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    Patient Name
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     Contact
                   </th>
@@ -373,7 +397,18 @@ export default function XrayDashboardPage() {
                   filteredData.map((row: any) => (
                     <React.Fragment key={row.id}>
                       <tr className="hover:bg-gray-50 transition-colors duration-150">
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{row.name}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex flex-col">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm font-medium text-gray-900">{row.name}</span>
+                              {row.Hospital_name && (
+                                <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-gray-100 text-gray-600 border border-gray-200">
+                                  {row.Hospital_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{row.number}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{`${row.age} ${row.age_unit}`}</td>
                         <td className="px-4 py-3 text-sm text-gray-700 max-w-xs">
@@ -571,7 +606,7 @@ export default function XrayDashboardPage() {
                         return <div className="text-center text-red-500 text-xs">Error loading test details</div>
                       }
                     })()}
-                    
+
                     {/* Remark Section */}
                     <div className="pt-3 border-t border-gray-200">
                       <div className="flex justify-between items-start bg-blue-50 p-2 rounded-lg text-xs">

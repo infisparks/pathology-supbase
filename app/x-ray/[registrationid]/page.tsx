@@ -10,7 +10,8 @@ import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { xrayData } from "@/app/x-ray/index" // Assuming this file is in the same directory
+import { xrayData } from "@/app/x-ray/index"
+import { xrayPriceList as gautamiXrayData } from "@/app/x-ray/indexGautami"
 
 // This component will be a dynamic page that receives params
 interface XrayDetailPageProps {
@@ -32,21 +33,30 @@ const withRetry = async <T,>(fn: () => Promise<any>, retries = 3, delay = 1000):
   }
 }
 
-// Prepare a map for easy lookup of examination prices
+// Prepare a map for easy lookup of examination prices (default data)
 const examinationPriceMap = xrayData.xray_price_list.reduce<Record<string, any>>((acc, item) => {
   acc[item.examination] = item
   return acc
 }, {})
 
-// Prepare a map for easy lookup of procedure prices
+// Prepare a map for easy lookup of procedure prices (default data)
 const procedurePriceMap = xrayData.procedure.reduce<Record<string, any>>((acc, item) => {
   acc[item.name] = item
   return acc
 }, {})
 
-// Separate examinations and procedures for better organization
+// Prepare a map for Gautami hospital data
+const gautamiExaminationPriceMap = gautamiXrayData.reduce<Record<string, any>>((acc, item) => {
+  acc[item.Examination] = item
+  return acc
+}, {})
+
+// Separate examinations and procedures for better organization (default data)
 const regularExaminations = xrayData.xray_price_list.map((item) => item.examination)
 const procedureExaminations = xrayData.procedure.map((item) => item.name)
+
+// Gautami hospital examinations
+const gautamiExaminations = gautamiXrayData.map((item) => item.Examination)
 
 // Initial form state
 const initialFormData = {
@@ -75,6 +85,52 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
   const [messageType, setMessageType] = useState("")
   const [searchTerms, setSearchTerms] = useState<Record<number, string>>({})
   const searchInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+
+  const isGautamiHospital = (hospitalName: string) => {
+    return hospitalName === "Gautami Medfors NX Hospital"
+  }
+
+  const getXrayViaOptions = (hospitalName: string) => {
+    if (isGautamiHospital(hospitalName)) {
+      return [
+        { value: "OPD_Amt", label: "OPD Amount" },
+        { value: "Portable", label: "Portable" },
+      ]
+    }
+    return [
+      { value: "Price", label: "Price" },
+      { value: "Ward", label: "Ward" },
+      { value: "ICU", label: "ICU" },
+    ]
+  }
+
+  const getExaminationList = (hospitalName: string) => {
+    if (isGautamiHospital(hospitalName)) {
+      return { regular: gautamiExaminations, procedures: [] }
+    }
+    return { regular: regularExaminations, procedures: procedureExaminations }
+  }
+
+  const calculateAmount = (examination: string, xrayVia: string, hospitalName: string) => {
+    if (isGautamiHospital(hospitalName)) {
+      const gautamiItem = gautamiExaminationPriceMap[examination]
+      if (gautamiItem) {
+        return gautamiItem[xrayVia] || 0
+      }
+    } else {
+      const xrayItem = examinationPriceMap[examination]
+      const procedureItem = procedurePriceMap[examination]
+
+      if (xrayItem) {
+        const viaKey = xrayVia.toLowerCase()
+        return xrayItem[viaKey] || 0
+      } else if (procedureItem) {
+        return procedureItem.price || 0
+      }
+    }
+    return 0
+  }
 
   // Fetch data on initial load
   useEffect(() => {
@@ -100,6 +156,9 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
         return
       }
 
+      const hospitalName = data.Hospital_name || "MEDFORD HOSPITAL"
+      const isGautami = isGautamiHospital(hospitalName)
+
       // Format fetched data to fit the form state
       const formattedData = {
         name: data.name,
@@ -107,17 +166,25 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
         gender: data.gender || "",
         age: data.age || "",
         ageUnit: data.age_unit || "Years",
-        hospitalName: data.Hospital_name || "MEDFORD HOSPITAL",
+        hospitalName: hospitalName,
         billNumber: data.bill_number || "",
         doctorName: data.Refer_doctorname || "",
         visitType: data.Visit_type || "OPD",
         tpa: data.Tpa || "No",
         remark: data.Remark || "",
-        xrayTests: (data["x-ray_detail"] || []).map((test: any) => ({
-          examination: test.Examination,
-          amount: test.Amount,
-          xrayVia: test.Xray_Via === "N/A" ? "Price" : test.Xray_Via,
-        })),
+        xrayTests: (data["x-ray_detail"] || []).map((test: any) => {
+          // Handle different X-ray Via formats based on hospital
+          let xrayVia = test.Xray_Via
+          if (xrayVia === "N/A") {
+            xrayVia = isGautami ? "OPD_Amt" : "Price"
+          }
+
+          return {
+            examination: test.Examination,
+            amount: test.Amount,
+            xrayVia: xrayVia,
+          }
+        }),
         totalAmount: data.amount_detail?.totalAmount || 0,
         discount: data.amount_detail?.discount || 0,
         payments: (data.amount_detail?.paymentHistory || []).map((payment: any) => ({
@@ -127,6 +194,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
       }
 
       setFormData(formattedData)
+      setIsInitialLoad(false)
       setLoading(false)
     }
 
@@ -138,6 +206,18 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
     const total = formData.xrayTests.reduce((sum, test) => sum + (test.amount || 0), 0)
     setFormData((prev) => ({ ...prev, totalAmount: total }))
   }, [formData.xrayTests])
+
+  useEffect(() => {
+    if (!isInitialLoad) {
+      setFormData((prev) => ({
+        ...prev,
+        xrayTests: [
+          { examination: "", amount: 0, xrayVia: isGautamiHospital(prev.hospitalName) ? "OPD_Amt" : "Price" },
+        ],
+      }))
+      setSearchTerms({})
+    }
+  }, [formData.hospitalName, isInitialLoad])
 
   // Handle form input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -162,34 +242,24 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
 
   const getFilteredExaminations = (index: number) => {
     const searchTerm = searchTerms[index] || ""
+    const examList = getExaminationList(formData.hospitalName)
+
     if (!searchTerm) {
-      return { regular: regularExaminations, procedures: procedureExaminations }
+      return examList
     }
 
-    const filteredRegular = regularExaminations.filter((exam) => exam.toLowerCase().includes(searchTerm.toLowerCase()))
-    const filteredProcedures = procedureExaminations.filter((exam) =>
+    const filteredRegular = examList.regular.filter((exam) => exam.toLowerCase().includes(searchTerm.toLowerCase()))
+    const filteredProcedures = examList.procedures.filter((exam) =>
       exam.toLowerCase().includes(searchTerm.toLowerCase()),
     )
 
     return { regular: filteredRegular, procedures: filteredProcedures }
   }
 
-  // Handle select changes for a specific X-ray test
   const handleTestSelectChange = (index: number, name: string, value: string) => {
     const newTests = [...formData.xrayTests]
     if (name === "examination") {
-      // Find the price data based on the selected examination
-      const xrayItem = examinationPriceMap[value]
-      const procedureItem = procedurePriceMap[value]
-      let amount = 0
-
-      if (xrayItem) {
-        // Use the selected via to determine the price
-        const viaKey = newTests[index].xrayVia.toLowerCase()
-        amount = xrayItem[viaKey]
-      } else if (procedureItem) {
-        amount = procedureItem.price
-      }
+      const amount = calculateAmount(value, newTests[index].xrayVia, formData.hospitalName)
 
       newTests[index] = {
         ...newTests[index],
@@ -198,24 +268,19 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
       }
       setSearchTerms((prev) => ({ ...prev, [index]: "" }))
     } else if (name === "xrayVia") {
-      // When X-ray Via changes, update the amount based on the current examination
       const currentExam = newTests[index].examination
-      const xrayItem = examinationPriceMap[currentExam]
-      let amount = 0
-      if (xrayItem) {
-        const viaKey = value.toLowerCase()
-        amount = xrayItem[viaKey]
-      }
+      const amount = calculateAmount(currentExam, value, formData.hospitalName)
+
       newTests[index] = { ...newTests[index], xrayVia: value, amount: amount }
     }
     setFormData((prev) => ({ ...prev, xrayTests: newTests }))
   }
 
-  // Add a new X-ray test section
   const handleAddTest = () => {
+    const defaultXrayVia = isGautamiHospital(formData.hospitalName) ? "OPD_Amt" : "Price"
     setFormData((prev) => ({
       ...prev,
-      xrayTests: [...prev.xrayTests, { examination: "", amount: 0, xrayVia: "Price" }],
+      xrayTests: [...prev.xrayTests, { examination: "", amount: 0, xrayVia: defaultXrayVia }],
     }))
   }
 
@@ -452,6 +517,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="flex flex-col">
                 <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor="doctorName">
                   Doctor Name
@@ -513,7 +579,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
               <Button
                 type="button"
                 onClick={handleAddTest}
-                className="bg-green-600 hover:bg-green-700 text-white rounded-md px-2 py-1 text-xs font-semibold shadow-sm transition-colors duration-200"
+                className="bg-green-600 hover:bg-green-700 text-white rounded-md px-2 py-1 text-xs font-semibold shadow-sm transition-transform duration-200 hover:scale-105"
               >
                 <Plus className="mr-1 h-3 w-3" /> Add Test
               </Button>
@@ -521,9 +587,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
 
             {/* Remark Field - Separate Box */}
             <div className="mb-2 p-2 bg-white rounded-md shadow-sm border border-gray-200">
-              <Label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Remark
-              </Label>
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Remark</Label>
               <Input
                 type="text"
                 name="remark"
@@ -536,6 +600,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
             </div>
             {formData.xrayTests.map((test, index) => {
               const filteredExams = getFilteredExaminations(index)
+              const xrayViaOptions = getXrayViaOptions(formData.hospitalName)
               return (
                 <div
                   key={index}
@@ -588,7 +653,10 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                         {filteredExams.regular.length > 0 && (
                           <div className="px-2 py-1">
                             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 py-1 bg-gray-50 rounded-md mb-1">
-                              Regular Examinations ({filteredExams.regular.length})
+                              {isGautamiHospital(formData.hospitalName)
+                                ? "Gautami Examinations"
+                                : "Regular Examinations"}{" "}
+                              ({filteredExams.regular.length})
                             </div>
                             {filteredExams.regular.map((exam) => (
                               <SelectItem
@@ -607,8 +675,8 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                           <div className="border-t border-gray-200 my-1"></div>
                         )}
 
-                        {/* Procedure Section */}
-                        {filteredExams.procedures.length > 0 && (
+                        {/* Procedure Section - Only for non-Gautami hospitals */}
+                        {filteredExams.procedures.length > 0 && !isGautamiHospital(formData.hospitalName) && (
                           <div className="px-2 py-1">
                             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2 py-1 bg-orange-50 rounded-md mb-1">
                               Procedures ({filteredExams.procedures.length})
@@ -636,12 +704,11 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* X-ray Via */}
                   <div className="flex flex-col">
                     <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor={`xrayVia-${index}`}>
                       X-ray Via
                     </Label>
-                    {isProcedureExamination(test.examination) ? (
+                    {isProcedureExamination(test.examination) && !isGautamiHospital(formData.hospitalName) ? (
                       <Input
                         type="text"
                         value="N/A"
@@ -657,9 +724,11 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                           <SelectValue placeholder="Select via" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Price">Price</SelectItem>
-                          <SelectItem value="Ward">Ward</SelectItem>
-                          <SelectItem value="ICU">ICU</SelectItem>
+                          {xrayViaOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -697,7 +766,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                   <Button
                     type="button"
                     onClick={handleAddPayment}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-md px-2 py-1 text-xs font-semibold shadow-sm transition-colors duration-200"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-md px-2 py-1 text-xs font-semibold shadow-sm transition-transform duration-200 hover:scale-105"
                   >
                     <Plus className="mr-1 h-3 w-3" /> Add Payment
                   </Button>
@@ -736,7 +805,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                     </Button>
 
                     <div className="flex flex-col">
-                      <Label className="text-xs font-semibold text-gray-700 mb-1">Amount</Label>
+                      <Label className="text-xs font-medium text-gray-700 mb-1">Amount</Label>
                       <Input
                         type="number"
                         value={payment.amount}
@@ -747,7 +816,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                     </div>
 
                     <div className="flex flex-col">
-                      <Label className="text-xs font-semibold text-gray-700 mb-1">Mode</Label>
+                      <Label className="text-xs font-medium text-gray-700 mb-1">Mode</Label>
                       <Select
                         value={payment.paymentMode}
                         onValueChange={(value) => handlePaymentChange(index, "paymentMode", value)}
@@ -780,7 +849,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
                     <span className="text-xs font-semibold text-gray-900">₹{formData.discount}</span>
                   </div>
 
-                  <div className="flex justify-between items-center py-1 border-b border-gray-200">
+                  <div className="flex justify-between items-center py-1 border-b-2 border-gray-300">
                     <span className="text-xs font-medium text-gray-600">Total Paid:</span>
                     <span className="text-xs font-semibold text-gray-900">₹{totalPaid}</span>
                   </div>

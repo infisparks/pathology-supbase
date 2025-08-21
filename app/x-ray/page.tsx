@@ -10,8 +10,8 @@ import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-// Import the new JSON data for examinations and prices
 import { xrayData } from "./index"
+import { xrayPriceList as gautamiXrayPriceList, procedureList as gautamiProcedureList } from "./indexGautami"
 
 // Helper function for exponential backoff retry logic
 const withRetry = async <T,>(fn: () => Promise<any>, retries = 3, delay = 1000): Promise<any> => {
@@ -26,21 +26,33 @@ const withRetry = async <T,>(fn: () => Promise<any>, retries = 3, delay = 1000):
   }
 }
 
-// Prepare a map for easy lookup of examination prices
+// Default hospital data maps
 const examinationPriceMap = xrayData.xray_price_list.reduce<Record<string, any>>((acc, item) => {
   acc[item.examination] = item
   return acc
 }, {})
 
-// Prepare a map for easy lookup of procedure prices
 const procedurePriceMap = xrayData.procedure.reduce<Record<string, any>>((acc, item) => {
   acc[item.name] = item
   return acc
 }, {})
 
-// Separate examinations and procedures for better organization
+// Gautami hospital data maps
+const gautamiExaminationPriceMap = gautamiXrayPriceList.reduce<Record<string, any>>((acc, item) => {
+  acc[item.Examination] = item
+  return acc
+}, {})
+
+const gautamiProcedurePriceMap = gautamiProcedureList.reduce<Record<string, any>>((acc, item) => {
+  acc[item.Procedure] = item
+  return acc
+}, {})
+
 const regularExaminations = xrayData.xray_price_list.map((item) => item.examination)
 const procedureExaminations = xrayData.procedure.map((item) => item.name)
+
+const gautamiRegularExaminations = gautamiXrayPriceList.map((item) => item.Examination)
+const gautamiProcedureExaminations = gautamiProcedureList.map((item) => item.Procedure)
 
 // Main X-ray page component
 export default function XrayPage() {
@@ -68,11 +80,53 @@ export default function XrayPage() {
   const [searchTerms, setSearchTerms] = useState<Record<number, string>>({})
   const searchInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
+  const isGautamiHospital = () => {
+    return formData.hospitalName === "Gautami Medfors NX Hospital"
+  }
+
+  const getCurrentDataMaps = () => {
+    if (isGautamiHospital()) {
+      return {
+        examinationMap: gautamiExaminationPriceMap,
+        procedureMap: gautamiProcedurePriceMap,
+        regularExams: gautamiRegularExaminations,
+        procedureExams: gautamiProcedureExaminations,
+      }
+    }
+    return {
+      examinationMap: examinationPriceMap,
+      procedureMap: procedurePriceMap,
+      regularExams: regularExaminations,
+      procedureExams: procedureExaminations,
+    }
+  }
+
+  const getXrayViaOptions = () => {
+    if (isGautamiHospital()) {
+      return [
+        { value: "OPD_Amt", label: "OPD Amount" },
+        { value: "Portable", label: "Portable" },
+      ]
+    }
+    return [
+      { value: "price", label: "Price" },
+      { value: "ward", label: "Ward" },
+      { value: "icu", label: "ICU" },
+    ]
+  }
+
   // Calculate total amount whenever x-ray tests change
   useEffect(() => {
     const total = formData.xrayTests.reduce((sum, test) => sum + (test.amount || 0), 0)
     setFormData((prev) => ({ ...prev, totalAmount: total }))
   }, [formData.xrayTests])
+
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      xrayTests: [{ examination: "", amount: 0, xrayVia: isGautamiHospital() ? "OPD_Amt" : "price" }],
+    }))
+  }, [formData.hospitalName])
 
   // Handle form input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -80,9 +134,9 @@ export default function XrayPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  // Check if examination is a procedure (HSG, IVP, BMFT, BM SWALLOW)
   const isProcedureExamination = (examination: string) => {
-    return ["HSG", "IVP", "BMFT", "BM SWALLOW"].includes(examination)
+    const { procedureExams } = getCurrentDataMaps()
+    return procedureExams.includes(examination)
   }
 
   const handleSearchChange = (index: number, searchTerm: string) => {
@@ -97,33 +151,42 @@ export default function XrayPage() {
 
   const getFilteredExaminations = (index: number) => {
     const searchTerm = searchTerms[index] || ""
+    const { regularExams, procedureExams } = getCurrentDataMaps()
+
     if (!searchTerm) {
-      return { regular: regularExaminations, procedures: procedureExaminations }
+      return { regular: regularExams, procedures: procedureExams }
     }
 
-    const filteredRegular = regularExaminations.filter((exam) => exam.toLowerCase().includes(searchTerm.toLowerCase()))
-    const filteredProcedures = procedureExaminations.filter((exam) =>
-      exam.toLowerCase().includes(searchTerm.toLowerCase()),
-    )
+    const filteredRegular = regularExams.filter((exam) => exam.toLowerCase().includes(searchTerm.toLowerCase()))
+    const filteredProcedures = procedureExams.filter((exam) => exam.toLowerCase().includes(searchTerm.toLowerCase()))
 
     return { regular: filteredRegular, procedures: filteredProcedures }
   }
 
-  // Handle select changes for a specific X-ray test
   const handleTestSelectChange = (index: number, name: string, value: string) => {
     const newTests = [...formData.xrayTests]
+    const { examinationMap, procedureMap } = getCurrentDataMaps()
+
     if (name === "examination") {
       // Find the price data based on the selected examination
-      const xrayItem = examinationPriceMap[value]
-      const procedureItem = procedurePriceMap[value]
+      const xrayItem = examinationMap[value]
+      const procedureItem = procedureMap[value]
       let amount = 0
 
       if (xrayItem) {
         // Use the selected via to determine the price
-        const viaKey = newTests[index].xrayVia.toLowerCase()
-        amount = xrayItem[viaKey]
+        const viaKey = newTests[index].xrayVia
+        if (isGautamiHospital()) {
+          amount = xrayItem[viaKey] || 0
+        } else {
+          amount = xrayItem[viaKey] || 0
+        }
       } else if (procedureItem) {
-        amount = procedureItem.price
+        if (isGautamiHospital()) {
+          amount = procedureItem.Amount || 0
+        } else {
+          amount = procedureItem.price || 0
+        }
       }
 
       newTests[index] = {
@@ -135,11 +198,10 @@ export default function XrayPage() {
     } else if (name === "xrayVia") {
       // When X-ray Via changes, update the amount based on the current examination
       const currentExam = newTests[index].examination
-      const xrayItem = examinationPriceMap[currentExam]
+      const xrayItem = examinationMap[currentExam]
       let amount = 0
       if (xrayItem) {
-        const viaKey = value.toLowerCase()
-        amount = xrayItem[viaKey]
+        amount = xrayItem[value] || 0
       }
       newTests[index] = { ...newTests[index], xrayVia: value, amount: amount }
     }
@@ -148,9 +210,10 @@ export default function XrayPage() {
 
   // Add a new X-ray test section
   const handleAddTest = () => {
+    const defaultXrayVia = isGautamiHospital() ? "OPD_Amt" : "price"
     setFormData((prev) => ({
       ...prev,
-      xrayTests: [...prev.xrayTests, { examination: "", amount: 0, xrayVia: "Price" }],
+      xrayTests: [...prev.xrayTests, { examination: "", amount: 0, xrayVia: defaultXrayVia }],
     }))
   }
 
@@ -466,9 +529,7 @@ export default function XrayPage() {
 
             {/* Remark Field - Separate Box */}
             <div className="mb-2 p-2 bg-white rounded-md shadow-sm border border-gray-200">
-              <Label className="text-xs font-semibold text-gray-700 mb-1 block">
-                Remark
-              </Label>
+              <Label className="text-xs font-semibold text-gray-700 mb-1 block">Remark</Label>
               <Input
                 type="text"
                 name="remark"
@@ -481,6 +542,7 @@ export default function XrayPage() {
             </div>
             {formData.xrayTests.map((test, index) => {
               const filteredExams = getFilteredExaminations(index)
+              const xrayViaOptions = getXrayViaOptions()
               return (
                 <div
                   key={index}
@@ -581,7 +643,6 @@ export default function XrayPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {/* X-ray Via */}
                   <div className="flex flex-col">
                     <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor={`xrayVia-${index}`}>
                       X-ray Via
@@ -602,9 +663,11 @@ export default function XrayPage() {
                           <SelectValue placeholder="Select via" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Price">Price</SelectItem>
-                          <SelectItem value="Ward">Ward</SelectItem>
-                          <SelectItem value="ICU">ICU</SelectItem>
+                          {xrayViaOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -681,7 +744,7 @@ export default function XrayPage() {
                     </Button>
 
                     <div className="flex flex-col">
-                      <Label className="text-xs font-semibold text-gray-700 mb-1">Amount</Label>
+                      <Label className="text-xs font-medium text-gray-700 mb-1">Amount</Label>
                       <Input
                         type="number"
                         value={payment.amount}
@@ -692,7 +755,7 @@ export default function XrayPage() {
                     </div>
 
                     <div className="flex flex-col">
-                      <Label className="text-xs font-semibold text-gray-700 mb-1">Mode</Label>
+                      <Label className="text-xs font-medium text-gray-700 mb-1">Mode</Label>
                       <Select
                         value={payment.paymentMode}
                         onValueChange={(value) => handlePaymentChange(index, "paymentMode", value)}
