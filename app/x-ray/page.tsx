@@ -81,7 +81,7 @@ export default function XrayPage() {
   const searchInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
   const isGautamiHospital = () => {
-    return formData.hospitalName === "Gautami Medfors NX Hospital"
+    return formData.hospitalName === "Gautami Medford NX Hospital"
   }
 
   const getCurrentDataMaps = () => {

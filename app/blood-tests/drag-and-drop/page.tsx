@@ -461,7 +461,7 @@ function DroppableArea({ id, items, title, control, register, errors, removePara
         <CardTitle className="text-lg">{title}</CardTitle>
       </CardHeader>
       <CardContent ref={setNodeRef} className="min-h-[200px] border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-        {items.length === 0 && <p className="text-gray-500 text-center text-gray-500">Drag items here</p>}
+        {items.length === 0 && <p className="text-gray-500 text-center ">Drag items here</p>}
         <SortableContext items={items.map(item => String(item.id))} strategy={verticalListSortingStrategy}> {/* Explicitly cast ID to string */}
           {items.map((item, itemIndex) => (
             <div key={item.id} className="border border-gray-200 rounded-lg mb-2 p-1.5 flex items-center justify-between">

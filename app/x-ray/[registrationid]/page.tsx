@@ -86,9 +86,11 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
   const [searchTerms, setSearchTerms] = useState<Record<number, string>>({})
   const searchInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [dataLoaded, setDataLoaded] = useState(false)
+  const [initialHospitalName, setInitialHospitalName] = useState("")
 
   const isGautamiHospital = (hospitalName: string) => {
-    return hospitalName === "Gautami Medfors NX Hospital"
+    return hospitalName === "Gautami Medford NX Hospital"
   }
 
   const getXrayViaOptions = (hospitalName: string) => {
@@ -159,6 +161,8 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
       const hospitalName = data.Hospital_name || "MEDFORD HOSPITAL"
       const isGautami = isGautamiHospital(hospitalName)
 
+      setInitialHospitalName(hospitalName)
+
       // Format fetched data to fit the form state
       const formattedData = {
         name: data.name,
@@ -172,19 +176,22 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
         visitType: data.Visit_type || "OPD",
         tpa: data.Tpa || "No",
         remark: data.Remark || "",
-        xrayTests: (data["x-ray_detail"] || []).map((test: any) => {
-          // Handle different X-ray Via formats based on hospital
-          let xrayVia = test.Xray_Via
-          if (xrayVia === "N/A") {
-            xrayVia = isGautami ? "OPD_Amt" : "Price"
-          }
+        xrayTests:
+          (data["x-ray_detail"] || []).length > 0
+            ? (data["x-ray_detail"] || []).map((test: any) => {
+                // Handle different X-ray Via formats based on hospital
+                let xrayVia = test.Xray_Via
+                if (xrayVia === "N/A") {
+                  xrayVia = isGautami ? "OPD_Amt" : "Price"
+                }
 
-          return {
-            examination: test.Examination,
-            amount: test.Amount,
-            xrayVia: xrayVia,
-          }
-        }),
+                return {
+                  examination: test.Examination,
+                  amount: test.Amount,
+                  xrayVia: xrayVia,
+                }
+              })
+            : [{ examination: "", amount: 0, xrayVia: isGautami ? "OPD_Amt" : "Price" }],
         totalAmount: data.amount_detail?.totalAmount || 0,
         discount: data.amount_detail?.discount || 0,
         payments: (data.amount_detail?.paymentHistory || []).map((payment: any) => ({
@@ -194,6 +201,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
       }
 
       setFormData(formattedData)
+      setDataLoaded(true)
       setIsInitialLoad(false)
       setLoading(false)
     }
@@ -208,7 +216,7 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
   }, [formData.xrayTests])
 
   useEffect(() => {
-    if (!isInitialLoad) {
+    if (dataLoaded && !isInitialLoad && formData.hospitalName !== initialHospitalName) {
       setFormData((prev) => ({
         ...prev,
         xrayTests: [
@@ -216,8 +224,9 @@ export default function XrayDetailPage({ params }: XrayDetailPageProps) {
         ],
       }))
       setSearchTerms({})
+      setInitialHospitalName(formData.hospitalName)
     }
-  }, [formData.hospitalName, isInitialLoad])
+  }, [formData.hospitalName, dataLoaded, isInitialLoad, initialHospitalName])
 
   // Handle form input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
