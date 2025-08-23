@@ -151,6 +151,7 @@ export default function Dashboard() {
           const patientDetail = registrationRow.patientdetial || {}
           return {
             id: registrationRow.id,
+            bloodtest_detail: registrationRow.bloodtest_detail || {},
             registration_id: registrationRow.id,
             visitType: registrationRow.visit_type || "",
             createdAt: registrationRow.registration_time || registrationRow.created_at,
@@ -250,6 +251,7 @@ export default function Dashboard() {
 
         return {
           id: registrationRow.id,
+          bloodtest_detail: registrationRow.bloodtest_detail || {},
           registration_id: registrationRow.id,
           visitType: registrationRow.visit_type || "",
           createdAt: registrationRow.registration_time || registrationRow.created_at,
@@ -350,6 +352,7 @@ export default function Dashboard() {
             const patientDetail = registrationRow.patientdetial || {}
             return {
               id: registrationRow.id,
+              bloodtest_detail: registrationRow.bloodtest_detail || {},
               registration_id: registrationRow.id,
               visitType: registrationRow.visit_type || "",
               createdAt: registrationRow.registration_time || registrationRow.created_at,

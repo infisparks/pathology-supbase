@@ -381,6 +381,8 @@ export default function PatientEntry() {
             age: data.age,
             day_type: data.dayType,
             total_day: totalDay,
+            gender: data.gender,
+            address: data.address || "",
           })
           .eq("id", patientDatabaseId)
         throwIfError(updateErr)
@@ -670,7 +672,6 @@ export default function PatientEntry() {
                       <Select
                         value={watch("gender")}
                         onValueChange={(v) => setValue("gender", v)}
-                        disabled={isExistingPatient}
                       >
                         <SelectTrigger className={`h-8 ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}>
                           <SelectValue placeholder="Select gender" />
@@ -722,7 +723,6 @@ export default function PatientEntry() {
                         {...register("address")}
                         className={`min-h-[50px] resize-none ${isExistingPatient ? "bg-blue-50 border-blue-200" : ""}`}
                         placeholder="123 Main St, City"
-                        disabled={isExistingPatient}
                       />
                     </div>
                     <div className="col-span-5 relative" ref={doctorHintsRef}>

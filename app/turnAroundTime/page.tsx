@@ -26,12 +26,13 @@ interface TurnAroundTimeMetrics {
   totalTurnAroundTime: number
 }
 
-// 2. NEW HELPER: Function to format minutes into hours and minutes
-const formatMinutesToHoursAndMinutes = (totalMinutes: number): string => {
-  if (totalMinutes === 0) return '0h 0m';
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = Math.round(totalMinutes % 60);
-  return `${hours}h ${minutes}m`;
+// 2. NEW HELPER: Function to format total seconds into Hrs:Min:Sec format
+const formatTotalSecondsToHrsMinSec = (totalSeconds: number): string => {
+  if (totalSeconds === 0) return '0h 0m 0s';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.round(totalSeconds % 60);
+  return `${hours}h ${minutes}m ${seconds}s`;
 };
 
 
@@ -162,7 +163,7 @@ export default function TurnAroundTimePage() {
     const totalRegistrations = filteredRegistrations.length
 
     const completedRegistrations = filteredRegistrations.filter(isAllTestsComplete);
-    let totalTATinMinutes = 0;
+    let totalTATinSeconds = 0;
     completedRegistrations.forEach(r => {
         const tatString = calculateTurnAroundTime(r);
         if (tatString !== '-') {
@@ -170,14 +171,14 @@ export default function TurnAroundTimePage() {
             if (parts) {
                 const hours = parseInt(parts[1]);
                 const minutes = parseInt(parts[2]);
-                totalTATinMinutes += (hours * 60) + minutes;
+                totalTATinSeconds += (hours * 3600) + (minutes * 60);
             }
         }
     });
 
     return {
       totalRegistrations,
-      totalTurnAroundTime: completedRegistrations.length > 0 ? totalTATinMinutes / completedRegistrations.length : 0,
+      totalTurnAroundTime: totalTATinSeconds,
     }
   }, [filteredRegistrations])
 
@@ -283,8 +284,8 @@ export default function TurnAroundTimePage() {
             },
             {
               icon: ClockIcon,
-              label: "Average Turn Around Time",
-              val: formatMinutesToHoursAndMinutes(metrics.totalTurnAroundTime),
+              label: "Total Turn Around Time",
+              val: formatTotalSecondsToHrsMinSec(metrics.totalTurnAroundTime),
               color: "from-purple-500 to-purple-600",
               textColor: "text-purple-600",
             },
