@@ -112,7 +112,64 @@ export const format12Hour = (iso: string) =>
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-  })
+  });
+
+export const getLatestReportedOnTime = (registration: Registration) => {
+  let latestReportedOn: Date | null = null;
+
+  if (registration.bloodtest) {
+    for (const testKey in registration.bloodtest) {
+      if (Object.prototype.hasOwnProperty.call(registration.bloodtest, testKey)) {
+        const test = registration.bloodtest[testKey];
+        if (test && test.reportedOn) {
+          const reportedDate = new Date(test.reportedOn);
+          if (isNaN(reportedDate.getTime())) continue; // Skip invalid dates
+
+          if (!latestReportedOn || reportedDate > latestReportedOn) {
+            latestReportedOn = reportedDate;
+          }
+        }
+      }
+    }
+  }
+
+  if (latestReportedOn) {
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "Asia/Kolkata",
+    }).format(latestReportedOn);
+  }
+  return "-";
+};
+
+export const calculateTurnAroundTime = (registration: Registration) => {
+  const registrationTime = new Date(registration.createdAt);
+  const reportedOnTimeStr = getLatestReportedOnTime(registration);
+  
+  if (reportedOnTimeStr === "-") return "-";
+
+  const reportedOnTime = new Date(reportedOnTimeStr);
+
+  if (isNaN(registrationTime.getTime()) || isNaN(reportedOnTime.getTime())) return "-";
+
+  const diffMs = reportedOnTime.getTime() - registrationTime.getTime();
+
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  let tat = "";
+  if (diffDays > 0) tat += `${diffDays}d `;
+  if (diffHours > 0) tat += `${diffHours}h `;
+  if (diffMinutes > 0) tat += `${diffMinutes}m`;
+
+  return tat.trim() || "<1m";
+};
 
 export const downloadBill = (selectedRegistration: Registration) => {
   const img = new Image()

@@ -18,18 +18,29 @@ import {
 } from 'lucide-react'
 import type { Registration } from '../dashboard/types/dashboard'
 import { Badge } from '@/components/ui/badge'
+import { isTestFullyEntered, isAllTestsComplete, getLatestReportedOnTime, calculateTurnAroundTime } from '../dashboard/lib/dashboard-utils'
 
+// 1. UPDATED: Add totalTurnAroundTime to the interface
 interface TurnAroundTimeMetrics {
   totalRegistrations: number
   totalTurnAroundTime: number
 }
+
+// 2. NEW HELPER: Function to format minutes into hours and minutes
+const formatMinutesToHoursAndMinutes = (totalMinutes: number): string => {
+  if (totalMinutes === 0) return '0h 0m';
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = Math.round(totalMinutes % 60);
+  return `${hours}h ${minutes}m`;
+};
+
 
 export default function TurnAroundTimePage() {
   const router = useRouter()
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [metrics, setMetrics] = useState<TurnAroundTimeMetrics>({
     totalRegistrations: 0,
-    totalTurnAroundTime: 0,
+    totalTurnAroundTime: 0, // Initialize new metric
   })
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [hospitalFilter, setHospitalFilter] = useState<string>('all')
@@ -71,10 +82,11 @@ export default function TurnAroundTimePage() {
       }
 
       const mappedData: Registration[] = (data || []).map((registrationRow: any) => {
-        const patientDetail = registrationRow.patientdetial || {}
+        const patientDetail = registrationRow.patientdetial || {};
 
         return {
           id: registrationRow.id,
+          bloodtest_detail: registrationRow.bloodtest_detail || {}, // <-- add missing required property
           registration_id: registrationRow.id,
           visitType: registrationRow.visit_type || '',
           createdAt: registrationRow.registration_time || registrationRow.created_at,
@@ -145,14 +157,27 @@ export default function TurnAroundTimePage() {
     })
   }, [registrations, searchTerm, startDate, endDate, hospitalFilter])
 
-  // Calculate metrics based on filtered data
+  // 2. UPDATED: Calculate metrics based on filtered data
   const calculatedMetrics = useMemo(() => {
     const totalRegistrations = filteredRegistrations.length
-    const totalTurnAroundTime = 0 // For now, no data
+
+    const completedRegistrations = filteredRegistrations.filter(isAllTestsComplete);
+    let totalTATinMinutes = 0;
+    completedRegistrations.forEach(r => {
+        const tatString = calculateTurnAroundTime(r);
+        if (tatString !== '-') {
+            const parts = tatString.match(/(\d+)h (\d+)m/);
+            if (parts) {
+                const hours = parseInt(parts[1]);
+                const minutes = parseInt(parts[2]);
+                totalTATinMinutes += (hours * 60) + minutes;
+            }
+        }
+    });
 
     return {
       totalRegistrations,
-      totalTurnAroundTime,
+      totalTurnAroundTime: completedRegistrations.length > 0 ? totalTATinMinutes / completedRegistrations.length : 0,
     }
   }, [filteredRegistrations])
 
@@ -175,28 +200,13 @@ export default function TurnAroundTimePage() {
   // Status logic same as dashboard
   const getStatus = (registration: Registration) => {
     const sampleCollected = !!registration.sampleCollectedAt
-    const hasTests = registration.bloodTests && registration.bloodTests.length > 0
-    
-    if (!sampleCollected) {
-      return "Not Collected"
-    }
-    
-    if (hasTests) {
-      // Check if all tests are complete (simplified logic)
-      const allComplete = registration.bloodTests.every((test: any) => test.testType?.toLowerCase() === "outsource" || test.status === 'completed')
-      if (allComplete) {
-        return "Completed"
-      } else {
-        return "Pending"
-      }
-    }
-    
-    return "No Tests"
+    const complete = isAllTestsComplete(registration)
+    return !sampleCollected ? "Not Collected" : complete ? "Completed" : "Pending"
   }
 
   const getStatusBadge = (registration: Registration) => {
     const status = getStatus(registration)
-    
+
     switch (status) {
       case "Not Collected":
         return (
@@ -240,7 +250,7 @@ export default function TurnAroundTimePage() {
     if (!dateString) return '-'
     const date = new Date(dateString)
     if (isNaN(date.getTime())) return '-'
-    
+
     const day = date.getDate().toString().padStart(2, '0')
     const month = (date.getMonth() + 1).toString().padStart(2, '0')
     const year = date.getFullYear()
@@ -249,7 +259,7 @@ export default function TurnAroundTimePage() {
     const ampm = hours >= 12 ? 'PM' : 'AM'
     const displayHours = hours % 12 || 12
     const displayMinutes = minutes.toString().padStart(2, '0')
-    
+
     return `${day}/${month}/${year}, ${displayHours}:${displayMinutes} ${ampm}`
   }
 
@@ -261,22 +271,22 @@ export default function TurnAroundTimePage() {
           <h1 className="text-2xl font-bold text-gray-800">Turn Around Time Dashboard</h1>
         </div>
 
-        {/* Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* 3. UPDATED: Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {[
             {
               icon: ChartBarIcon,
-              label: "Total Registration",
+              label: "Total Registrations",
               val: metrics.totalRegistrations,
               color: "from-blue-500 to-blue-600",
               textColor: "text-blue-600",
             },
             {
               icon: ClockIcon,
-              label: "Total Turn Around Time",
-              val: metrics.totalTurnAroundTime,
-              color: "from-green-500 to-green-600",
-              textColor: "text-green-600",
+              label: "Average Turn Around Time",
+              val: formatMinutesToHoursAndMinutes(metrics.totalTurnAroundTime),
+              color: "from-purple-500 to-purple-600",
+              textColor: "text-purple-600",
             },
           ].map((m, i) => (
             <motion.div
@@ -409,6 +419,7 @@ export default function TurnAroundTimePage() {
                   </th>
                   <th className="px-6 py-4 text-left font-medium uppercase tracking-wider text-gray-600">Status</th>
                   <th className="px-6 py-4 text-left font-medium uppercase tracking-wider text-gray-600">Reported On</th>
+                  <th className="px-6 py-4 text-left font-medium uppercase tracking-wider text-gray-600">Turn Around Time</th>
                 </tr>
               </thead>
               <tbody>
@@ -452,7 +463,7 @@ export default function TurnAroundTimePage() {
                           <div className="max-h-20 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                             <ul className="space-y-1">
                               {registration.bloodTests.map((test: any) => {
-                                const done = test.testType?.toLowerCase() === "outsource" || test.status === 'completed'
+                                const done = test.testType?.toLowerCase() === "outsource" || isTestFullyEntered(registration, test)
                                 return (
                                   <li key={test.testId} className="flex items-center text-xs">
                                     {done ? (
@@ -477,14 +488,17 @@ export default function TurnAroundTimePage() {
                         {getStatusBadge(registration)}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
-                        -
+                        {getLatestReportedOnTime(registration)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {calculateTurnAroundTime(registration)}
                       </td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
-            
+
             {filteredRegistrations.length === 0 && !isLoading && (
               <div className="text-center py-8 text-gray-500">
                 <ClockIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />

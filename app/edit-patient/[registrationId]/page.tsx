@@ -34,24 +34,37 @@ function throwIfError(error: any) {
 }
 
 function time12ToISO(date: string, time12: string) {
-  const [time, mer] = time12.split(" ")
-  let [hh, mm] = time.split(":").map(Number)
-  if (mer === "PM" && hh < 12) hh += 12
-  if (mer === "AM" && hh === 12) hh = 0
-  return new Date(`${date}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`).toISOString()
+  const [time, mer] = time12.split(" ");
+  let [hh, mm] = time.split(":").map(Number);
+  if (mer === "PM" && hh < 12) hh += 12;
+  if (mer === "AM" && hh === 12) hh = 0;
+  return new Date(
+    `${date}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`,
+  ).toISOString();
+}
+
+function convertUtcToKolkata(isoString: string) {
+  const date = new Date(isoString);
+  return new Date(
+    date.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }),
+  );
 }
 
 function isoToTime12(isoString: string) {
-  const date = new Date(isoString)
-  const hours = date.getHours()
-  const minutes = date.getMinutes()
-  const ampm = hours >= 12 ? "PM" : "AM"
-  const displayHours = hours % 12 || 12
-  return `${String(displayHours).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ${ampm}`
+  const date = convertUtcToKolkata(isoString);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const hours12 = hours % 12 || 12;
+  return `${hours12}:${String(minutes).padStart(2, "0")} ${ampm}`;
 }
 
 function isoToDate(isoString: string) {
-  return new Date(isoString).toISOString().slice(0, 10)
+  const date = convertUtcToKolkata(isoString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /**
