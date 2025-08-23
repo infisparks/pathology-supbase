@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { 
-  Home, UserPlus, Users, FlaskConical, Package, Settings, LogOut, Stethoscope, ChevronLeft, ChevronRight
+  Home, UserPlus, Users, FlaskConical, Package, Settings, LogOut, Stethoscope, ChevronLeft, ChevronRight, Clock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { signOut } from '@/lib/auth'
@@ -18,6 +18,7 @@ const sidebarItems = [
   { icon: Stethoscope, label: 'X-ray Entry', href: '/x-ray', roles: ['admin', 'xray'] },
   { icon: Stethoscope, label: 'X-ray Dashboard', href: '/x-rayDashboard', roles: ['admin', 'xray'] },
   { icon: Users, label: 'Patients', href: '/patients', roles: ['admin'] },
+  { icon: Clock, label: 'Turn Around Time', href: '/turnAroundTime', roles: ['admin'] },
   { icon: Users, label: 'Deleted Entry', href: '/deleted', roles: ['admin'] },
   { icon: FlaskConical, label: 'Billing', href: '/billing', roles: ['admin'] },
   { icon: FlaskConical, label: 'Blood Tests', href: '/blood-tests', roles: ['admin'] },

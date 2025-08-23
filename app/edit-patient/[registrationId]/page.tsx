@@ -106,6 +106,8 @@ interface IFormInput {
   registrationDate: string
   registrationTime: string
   tpa: boolean // true = TPA, false = Normal
+  originalSampleCollectedTime?: string // Add this field to preserve original sample time
+  sendWhatsApp: boolean // Add this field for WhatsApp SMS control
 }
 
 interface PatientSuggestion {
@@ -168,6 +170,8 @@ export default function EditPatientPage() {
       discountAmount: 0,
       paymentEntries: [],
       tpa: false, // Default to Normal
+      originalSampleCollectedTime: undefined,
+      sendWhatsApp: false, // Default to false
     },
   })
 
@@ -273,6 +277,8 @@ export default function EditPatientPage() {
             ? isoToTime12(registrationData.registration_time)
             : defaultTime,
           tpa: registrationData.tpa ?? false,
+          originalSampleCollectedTime: registrationData.samplecollected_time,
+          sendWhatsApp: false, // Default to false for edit mode
           doctorId: null
         }
 
@@ -409,20 +415,20 @@ export default function EditPatientPage() {
       const totalDay = data.age * mult
 
       /* UPDATE PATIENT ROW */
-      const { error: patientErr } = await supabase
-        .from(TABLE.PATIENT)
-        .update({
-          name: data.name.toUpperCase(),
-          number: Number(data.contact),
-          address: data.address || "",
-          age: data.age,
-          day_type: data.dayType,
-          gender: data.gender,
-          patient_id: data.patientId,
-          total_day: totalDay,
-          title: data.title,
-        })
-        .eq("id", patientDbId)
+              const { error: patientErr } = await supabase
+          .from(TABLE.PATIENT)
+          .update({
+            name: data.name.toUpperCase(),
+            number: Number(data.contact),
+            address: data.address || "",
+            age: data.age,
+            day_type: data.dayType,
+            gender: data.gender,
+            patient_id: data.patientId,
+            total_day: totalDay,
+            title: data.title,
+          })
+          .eq("id", patientDbId)
 
       throwIfError(patientErr)
 
@@ -445,7 +451,7 @@ export default function EditPatientPage() {
           amount_paid: totalAmountPaid,
           visit_type: data.visitType,
           registration_time: isoTime,
-          samplecollected_time: isoTime,
+          samplecollected_time: data.originalSampleCollectedTime || isoTime, // Preserve original sample time
           discount_amount: discountAmount,
           hospital_name: data.hospitalName,
           payment_mode: data.paymentEntries.length > 0 ? data.paymentEntries[0].paymentMode : "online",
@@ -468,28 +474,34 @@ export default function EditPatientPage() {
       const totalPaidFormatted = totalPaid.toFixed(2)
       const remainingAmountFormatted = remainingAmount.toFixed(2)
       const bloodTestNames = data.bloodTests.map((test) => test.testName).join(", ") || "No blood tests booked."
-      const whatsappMessage = `Dear *${patientName}*,\n\nWe have received your request for: ${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
-      const whatsappPayload = {
-        token: "99583991573",
-        number: `91${patientContact}`,
-        message: whatsappMessage,
-      }
-      try {
-        const whatsappResponse = await fetch("https://a.infispark.in/send-text", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(whatsappPayload),
-        })
-        const whatsappResult = await whatsappResponse.json()
-        if (whatsappResponse.ok) {
-          console.log("WhatsApp message sent successfully:", whatsappResult)
-        } else {
-          console.error("Failed to send WhatsApp message:", whatsappResult)
+
+      // Send WhatsApp message only if sendWhatsApp is true
+      if (data.sendWhatsApp) {
+        const whatsappMessage = `Dear *${patientName}*,\n\nWe have received your request for: *${registrationDate}* at *${registrationTime}* \n\n*Patient ID*: ${data.patientId}\n*Registration ID*: ${registrationId}\n*Tests Booked*: ${bloodTestNames}\n\n*Summary*:\n*Total Amount*: ₹${totalAmountFormatted}\n*Amount Paid*: ₹${totalPaidFormatted}\n*Remaining Balance*: ₹${remainingAmountFormatted}\n\nThank you for choosing us!`
+        const whatsappPayload = {
+          token: "99583991573",
+          number: `91${patientContact}`,
+          message: whatsappMessage,
         }
-      } catch (whatsappError) {
-        console.error("Error sending WhatsApp message:", whatsappError)
+        try {
+          const whatsappResponse = await fetch("https://a.infispark.in/send-text", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(whatsappPayload),
+          })
+          const whatsappResult = await whatsappResponse.json()
+          if (whatsappResponse.ok) {
+            console.log("WhatsApp message sent successfully:", whatsappResult)
+          } else {
+            console.error("Failed to send WhatsApp message:", whatsappResult)
+          }
+        } catch (whatsappError) {
+          console.error("Error sending WhatsApp message:", whatsappError)
+        }
+      } else {
+        console.log("WhatsApp message skipped as per user preference")
       }
 
       alert("Patient updated successfully ✅")
@@ -735,7 +747,7 @@ export default function EditPatientPage() {
                 <div className="bg-white p-4 rounded-lg border">
                   <h3 className="text-lg font-semibold text-gray-700 mb-4">Address & Doctor</h3>
                   <div className="grid grid-cols-12 gap-4 items-end">
-                    <div className="col-span-5">
+                    <div className="col-span-4">
                       <Label className="text-sm">Address</Label>
                       <Textarea
                         {...register("address")}
@@ -743,7 +755,7 @@ export default function EditPatientPage() {
                         placeholder="123 Main St, City"
                       />
                     </div>
-                    <div className="col-span-5 relative">
+                    <div className="col-span-4 relative">
                       <Label className="text-sm">Doctor Name</Label>
                       <Input
                         {...register("doctorName", {
@@ -790,6 +802,20 @@ export default function EditPatientPage() {
                           />
                           <Label htmlFor="tpa-checkbox" className="text-sm cursor-pointer">TPA</Label>
                         </div>
+                      </div>
+                    </div>
+                    <div className="col-span-2 flex flex-col justify-end pb-1">
+                      <Label className="text-sm mb-1">Send WhatsApp</Label>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={watch("sendWhatsApp")}
+                          onCheckedChange={v => setValue("sendWhatsApp", !!v)}
+                          id="send-whatsapp-checkbox"
+                        />
+                        <Label htmlFor="send-whatsapp-checkbox" className="text-sm cursor-pointer flex items-center gap-2">
+                          <span className="text-green-600">📱</span>
+                          SMS
+                        </Label>
                       </div>
                     </div>
                   </div>
