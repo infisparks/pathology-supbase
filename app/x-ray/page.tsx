@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
-import { UserPlus, FlaskConical, Stethoscope, Trash2, X, Plus, Search } from "lucide-react"
+import { UserPlus, FlaskConical, Stethoscope, Trash2, X, Plus, Search, CalendarDays } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -12,6 +12,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { xrayData } from "./index"
 import { xrayPriceList as gautamiXrayPriceList, procedureList as gautamiProcedureList } from "./indexGautami"
+import { format } from "date-fns"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 // Helper function for exponential backoff retry logic
 const withRetry = async <T,>(fn: () => Promise<any>, retries = 3, delay = 1000): Promise<any> => {
@@ -72,6 +75,7 @@ export default function XrayPage() {
     totalAmount: 0,
     discount: 0,
     payments: [] as { amount: number; paymentMode: string }[],
+    dateOfAppointment: new Date(), // New field for date of appointment
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -292,6 +296,7 @@ export default function XrayPage() {
         Remark: formData.remark || null,
         amount_detail: amountDetail,
         "x-ray_detail": xrayDetail,
+        created_at: formData.dateOfAppointment.toISOString(), // Update created_at with the selected date
       }
 
       // Insert data into Supabase
@@ -321,6 +326,7 @@ export default function XrayPage() {
           totalAmount: 0,
           discount: 0,
           payments: [],
+          dateOfAppointment: new Date(), // Reset date of appointment
         })
         setSearchTerms({})
       }
@@ -507,6 +513,39 @@ export default function XrayPage() {
                     <SelectItem value="No">No</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex flex-col">
+                <Label className="text-sm font-semibold text-gray-700 mb-1" htmlFor="dateOfAppointment">
+                  Date of Appointment
+                </Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.dateOfAppointment && "text-muted-foreground",
+                      )}
+                    >
+                      <CalendarDays className="mr-2 h-4 w-4" />
+                      {formData.dateOfAppointment ? (
+                        format(formData.dateOfAppointment, "PPP")
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={formData.dateOfAppointment}
+                      onSelect={(date) =>
+                        setFormData((prev) => ({ ...prev, dateOfAppointment: date || new Date() }))
+                      }
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
