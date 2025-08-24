@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea" // Import Textarea
 
 import { cn } from "@/lib/utils" // Utility to conditionally join class names
 
@@ -164,6 +165,67 @@ const getFormulaDependencies = (formula: string): string[] => {
 
 /* ------------------------------------------------------------------ */
 
+const getFormDataForPreview = (
+  currentTests: TestValueEntry[],
+  patientDetails: PatientData, // Changed type here
+  fullPatientData: PatientData | null,
+): PatientData | null => {
+  if (!patientDetails || !fullPatientData) return null;
+
+  const bloodtestDetail: Record<string, any> = {};
+  for (const t of currentTests) {
+    const key = t.testName
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[.#$[\]]/g, "");
+
+    const params = t.parameters
+      .map((p) => {
+        const subs = p.subparameters?.filter((sp) => sp.value !== "") ?? [];
+        if (p.value !== "" || subs.length) {
+          const obj: any = { ...p, subparameters: subs };
+          const strValue = String(p.value);
+          if (/^[<>]/.test(strValue)) {
+            obj.value = strValue;
+          } else if (p.valueType === "number" && p.value !== "") {
+            const numValue = +p.value;
+            obj.value = strValue.includes(".") && strValue.endsWith("0") ? strValue : numValue;
+          }
+          subs.forEach((sp) => {
+            const spStr = String(sp.value);
+            if (/^[<>]/.test(spStr)) {
+              sp.value = spStr;
+            } else if (sp.valueType === "number" && sp.value !== "") {
+              const spNum = +sp.value;
+              sp.value = spStr.includes(".") && spStr.endsWith("0") ? spStr : spNum;
+            }
+          });
+          return obj;
+        }
+        return null;
+      })
+      .filter(Boolean) as TestParameterValue[];
+
+    if (params.length > 0) {
+      bloodtestDetail[key] = {
+        parameters: params,
+        testId: t.testId,
+        testName: t.testName, // Ensure testName is included
+        subheadings: t.subheadings || [],
+        createdAt: fullPatientData.bloodtest?.[key]?.createdAt || new Date().toISOString(),
+        reportedOn: fullPatientData.bloodtest?.[key]?.reportedOn || new Date().toISOString(),
+        enteredBy: fullPatientData.bloodtest?.[key]?.enteredBy || "unknown",
+        interpretation: fullPatientData.bloodtest?.[key]?.interpretation || "", // Preserve interpretation
+      };
+    }
+  }
+
+  return {
+    ...fullPatientData,
+    bloodtest: bloodtestDetail,
+  };
+};
+
 const BloodValuesForm: React.FC = () => {
   const router = useRouter()
   const params = useParams()
@@ -174,14 +236,7 @@ const BloodValuesForm: React.FC = () => {
   const [suggest, setSuggest] = useState<string[]>([])
   const [showSug, setShowSug] = useState<SuggestPos | null>(null)
   const [warn100, setWarn100] = useState<Record<string, boolean>>({})
-  const [patientDetails, setPatientDetails] = useState<{
-    id: number
-    age: number
-    gender: string
-    patientId: string
-    name: string
-    day_type: string
-  } | null>(null)
+  const [patientDetails, setPatientDetails] = useState<PatientData | null>(null)
   const [showPreviewModal, setShowPreviewModal] = useState(false) // State for preview modal
   const [pdfUrl, setPdfUrl] = useState<string | null>(null) // State for PDF blob URL
   const [fullPatientData, setFullPatientData] = useState<PatientData | null>(null) // Store full patient data for report generation
@@ -235,15 +290,6 @@ const BloodValuesForm: React.FC = () => {
         const patientId = registrationData.patient_id
         const bookedTests = registrationData.bloodtest_data || []
         const storedBloodtestDetail = registrationData.bloodtest_detail || {}
-
-        setPatientDetails({
-          id: registrationData.patientdetial.id,
-          age: registrationData.patientdetial.age,
-          gender: registrationData.patientdetial.gender,
-          patientId: registrationData.patientdetial.patient_id,
-          name: registrationData.patientdetial.name,
-          day_type: registrationData.patientdetial.day_type,
-        })
 
         // Calculate age in days based on day_type
         let ageDays = registrationData.patientdetial.age
@@ -424,6 +470,7 @@ const BloodValuesForm: React.FC = () => {
           };
         }
 
+        setPatientDetails(mappedPatientData); // Update patientDetails with full PatientData
         setFullPatientData({
           ...mappedPatientData,
           bloodtest: mappedBloodtestDetail, // Use the updated mappedBloodtestDetail
@@ -668,15 +715,22 @@ const BloodValuesForm: React.FC = () => {
 
   /* ══════════════ Preview Function ══════════════ */
   const handlePreview = async () => {
-    if (!fullPatientData) {
+    if (!fullPatientData || !patientDetails) {
       alert("Patient data not loaded yet. Please wait.")
       return
     }
 
     try {
+      const formDataForPreview = getFormDataForPreview(tests, patientDetails as PatientData, fullPatientData);
+
+      if (!formDataForPreview) {
+        alert("Could not prepare data for preview.");
+        return;
+      }
+
       const blob = await generateReportPdf(
-        fullPatientData,
-        Object.keys(fullPatientData.bloodtest || {}), // Include all tests for preview
+        formDataForPreview,
+        Object.keys(formDataForPreview.bloodtest || {}), // Include all tests for preview
         [], // No combined groups for a simple preview
         {}, // No historical data for a simple preview
         {}, // No comparison selections for a simple preview
@@ -1021,12 +1075,12 @@ const ParamRow: React.FC<RowProps> = ({
     }
   }
 
-  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+  const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     const rect = e.target.getBoundingClientRect()
     textChange(e.target.value, tIdx, pIdx, rect)
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const rect = e.target.getBoundingClientRect()
     textChange(e.target.value, tIdx, pIdx, rect)
   }
@@ -1112,15 +1166,14 @@ const ParamRow: React.FC<RowProps> = ({
         </div>
       ) : (
         <div className="relative ml-1.5 w-32">
-          <Input
+          <Textarea
             id={`param-${tIdx}-${pIdx}`}
-            type="text"
             value={String(currentParam.value ?? "")}
             onFocus={handleFocus}
             onChange={handleChange}
             onBlur={handleBlur}
-            placeholder={"Text"}
-            className="h-6 text-xs"
+            placeholder={"Text (multi-line)"}
+            className="h-6 text-xs min-h-[unset]" // min-h-[unset] to override default min-height
           />
         </div>
       )}

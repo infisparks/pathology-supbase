@@ -37,6 +37,7 @@ export interface BloodTestData {
   type?: string
   reportedOn?: string
   enteredBy?: string
+  createdAt?: string
   descriptions?: { heading: string; content: string }[]
   interpretation?: string // Added interpretation field
 }

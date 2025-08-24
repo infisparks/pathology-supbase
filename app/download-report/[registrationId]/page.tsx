@@ -770,6 +770,69 @@ function DownloadReport() {
         }
     }
 
+    const sendWhatsAppWithoutAI = async () => {
+        if (!patientData) return
+
+        try {
+            setIsSending(true)
+
+            const blob = await generateReportPdf(
+                patientData,
+                selectedTests,
+                combinedGroups,
+                historicalTestsData,
+                comparisonSelections,
+                "normal", // Default to normal report for WhatsApp
+                true, // Include letterhead for WhatsApp
+                false, // Do not skip cover for WhatsApp (so cover is page 1)
+                undefined, // Do not pass AI suggestions
+                false, // Do not include AI suggestions page
+            )
+
+            const filename = `reports/${patientData.registration_id}_${Date.now()}.pdf`
+
+            const { data: uploadData, error: uploadError } = await supabase.storage.from("reports").upload(filename, blob, {
+                cacheControl: "3600",
+                upsert: false,
+                contentType: "application/pdf",
+            })
+
+            if (uploadError) {
+                console.error("Supabase upload error:", uploadError)
+                throw new Error(`Failed to upload file to Supabase: ${uploadError.message}`)
+            }
+
+            const { data: publicUrlData } = supabase.storage.from("reports").getPublicUrl(filename)
+            const url = publicUrlData.publicUrl
+
+            const payload = {
+                token: "99583991573",
+                number: "91" + patientData.contact,
+                imageUrl: url,
+                caption: `Dear ${patientData.name},\n\nYour blood test report is now available:\n${url}\n\nRegards,\nYour Lab Team`,
+            }
+
+            const res = await fetch("https://a.infispark.in/send-image-url", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            })
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({ message: "Unknown error" }))
+                console.error("WhatsApp API Error:", errorData)
+                alert(`Failed to send via WhatsApp. Status: ${res.status}`)
+            } else {
+                alert("Report sent on WhatsApp without AI!")
+            }
+        } catch (e) {
+            console.error("Error sending WhatsApp message without AI:", e)
+            alert("Error sending WhatsApp message without AI.")
+        } finally {
+            setIsSending(false)
+        }
+    }
+
     // Loading state
     if (loading) {
         return (
@@ -1084,11 +1147,11 @@ function DownloadReport() {
                         </div>
 
                         {/* WhatsApp Button */}
-                        <>
+                        <div className="flex flex-col sm:flex-row gap-4 mt-4">
                             <button
                                 onClick={sendWhatsApp}
                                 disabled={isSending}
-                                className={`w-full flex items-center justify-center space-x-3 px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out ${isSending ? "bg-gray-400 cursor-not-allowed" : "bg-[#25D366] hover:bg-[#128C7E] text-white"
+                                className={`flex-1 flex items-center justify-center space-x-3 px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out ${isSending ? "bg-gray-400 cursor-not-allowed" : "bg-[#25D366] hover:bg-[#128C7E] text-white"
                                     }`}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -1097,16 +1160,29 @@ function DownloadReport() {
                                 <span>{isSending ? "Sending…" : "Send via WhatsApp"}</span>
                             </button>
 
-                            {/* Loading Overlay Popup */}
-                            {isSending && (
-                                <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-40">
-                                    <div className="bg-white rounded-xl shadow-xl p-8 flex flex-col items-center">
-                                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
-                                        <div className="mt-4 text-lg font-semibold text-gray-700">Sending Report via WhatsApp…</div>
-                                    </div>
+                            {/* WhatsApp Button Without AI */}
+                            <button
+                                onClick={sendWhatsAppWithoutAI}
+                                disabled={isSending}
+                                className={`flex-1 flex items-center justify-center space-x-3 px-6 py-3 rounded-xl font-medium transition duration-150 ease-in-out ${isSending ? "bg-gray-400 cursor-not-allowed" : "bg-orange-500 hover:bg-orange-600 text-white"
+                                    }`}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.709.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c0-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
+                                </svg>
+                                <span>{isSending ? "Sending…" : "Send without AI Report"}</span>
+                            </button>
+                        </div>
+
+                        {/* Loading Overlay Popup */}
+                        {isSending && (
+                            <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-40">
+                                <div className="bg-white rounded-xl shadow-xl p-8 flex flex-col items-center">
+                                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600 mx-auto"></div>
+                                    <div className="mt-4 text-lg font-semibold text-gray-700">Sending Report via WhatsApp…</div>
                                 </div>
-                            )}
-                        </>
+                            </div>
+                        )}
                     </div>
 
                     {/* Test Selection Card */}
