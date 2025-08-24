@@ -38,7 +38,8 @@ export interface Registration {
   name: string
   patientId: string
   age: number
-  
+  billNo?: string
+  bill_no?:string
   gender?: string
   contact?: number
   address?: string

@@ -233,6 +233,9 @@ export const downloadBill = (selectedRegistration: Registration) => {
     const nameLines = doc.splitTextToSize(fullName, nameColumnWidth);
 
     drawRow("Name", nameLines, "Patient ID", getMergedPatientId(selectedRegistration))
+    if (selectedRegistration.bill_no) {
+      drawRow("Bill No", selectedRegistration.bill_no, "", "");
+    }
     drawRow(
       "Age / Gender",
       `${selectedRegistration.age}${unit} / ${selectedRegistration.gender}`,
@@ -391,6 +394,9 @@ export const downloadMultipleBills = (selectedRegistrations: number[], allRegist
         const nameLines = doc.splitTextToSize(fullName, nameColumnWidth);
 
         drawRow("Name", nameLines, "Patient ID", getMergedPatientId(registration))
+        if (registration.bill_no) {
+          drawRow("Bill No", registration.bill_no, "", "");
+        }
         drawRow(
           "Age / Gender",
           `${registration.age}${unit} / ${registration.gender}`,
@@ -523,6 +529,9 @@ export const generateBillBlob = async (selectedRegistration: Registration): Prom
       const nameLines = doc.splitTextToSize(fullName, nameColumnWidth);
 
       drawRow("Name", nameLines, "Patient ID", getMergedPatientId(selectedRegistration))
+      if (selectedRegistration.bill_no) {
+        drawRow("Bill No", selectedRegistration.bill_no, "", "");
+      }
       drawRow(
         "Age / Gender",
         `${selectedRegistration.age}${unit} / ${selectedRegistration.gender}`,

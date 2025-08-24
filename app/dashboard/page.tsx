@@ -84,6 +84,13 @@ export default function Dashboard() {
 
   const [tempDiscount, setTempDiscount] = useState<string>("")
   const [amountId, setAmountId] = useState<string>("")
+  const [billNo, setBillNo] = useState<string>("")
+
+  useEffect(() => {
+    if (selectedRegistration) {
+      setBillNo(selectedRegistration.bill_no || "")
+    }
+  }, [selectedRegistration])
 
   const filterContentRef = useRef<HTMLDivElement>(null)
 
@@ -133,7 +140,7 @@ export default function Dashboard() {
         .from("registration")
         .select(
           `
-        id, registration_time, amount_paid, amount_paid_history, samplecollected_time, bloodtest_data, bloodtest_detail,
+        id, registration_time, amount_paid, amount_paid_history, samplecollected_time, bloodtest_data, bloodtest_detail, bill_no,
         patientdetial (
           id, name, patient_id, age, gender, number, address, day_type, total_day, title
         )
@@ -234,6 +241,7 @@ export default function Dashboard() {
           `
           *,
           tpa,
+          bill_no,
           patientdetial (
             id, name, patient_id, age, gender, number, address, day_type, total_day, title
           )
@@ -274,6 +282,7 @@ export default function Dashboard() {
           total_day: patientDetail.total_day,
           title: patientDetail.title,
           tpa: registrationRow.tpa === true,
+          bill_no: registrationRow.bill_no || undefined,
         }
       })
 
@@ -336,6 +345,7 @@ export default function Dashboard() {
         .select(
           `*,
           tpa,
+          bill_no,
           patientdetial (
             id, name, patient_id, age, gender, number, address, day_type, total_day, title
           )`
@@ -565,6 +575,7 @@ export default function Dashboard() {
                   paymentMode: paymentMode,
                   time: new Date().toISOString(),
                   ...(amountId ? { amountId } : {}),
+                  ...(billNo ? { billNo } : {}),
                 },
               ]
             : currentPaymentHistory.paymentHistory,
@@ -581,6 +592,10 @@ export default function Dashboard() {
         amount_paid_history: updatedPaymentHistory,
       }
 
+      if (billNo) {
+        updateData.bill_no = billNo
+      }
+
       const { error } = await supabase.from("registration").update(updateData).eq("id", selectedRegistration.id)
       if (error) throw error
 
@@ -589,17 +604,19 @@ export default function Dashboard() {
         discountAmount: newDiscountAmount,
         amountPaid: newTotalPaid,
         paymentHistory: updatedPaymentHistory,
+        ...(billNo ? { billNo } : {}),
       })
 
       setNewAmountPaid("")
       setAmountId("")
+      setBillNo("")
       setPaymentMode("online")
       alert("Payment and discount updated successfully!")
     } catch (error: any) {
       console.error("Dashboard: Error updating payment and discount:", error.message)
       alert("Error updating payment and discount. Please try again.")
     }
-  }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode, amountId])
+  }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode, amountId, billNo])
   // ---------- END FIXED PART ----------
 
   // When passing to FakeBill, ensure TPA price is used if tpa is true
@@ -613,6 +630,7 @@ export default function Dashboard() {
         price: tpa && typeof t.tpa_price === 'number' ? t.tpa_price : t.price,
       })),
       tpa,
+      bill_no: reg.bill_no, // Explicitly pass bill_no
     }
   }
 
@@ -695,6 +713,8 @@ export default function Dashboard() {
         }}
         amountId={amountId}
         setAmountId={setAmountId}
+        billNo={billNo}
+        setBillNo={setBillNo}
       />
     </div>
   )

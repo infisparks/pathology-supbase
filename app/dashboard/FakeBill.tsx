@@ -28,6 +28,8 @@ interface Patient {
   bloodTests?: BloodTest[];
   dayType?: "year" | "month" | "day";
   day_type?: "year" | "month" | "day";
+  billNo?: string;
+  bill_no?: string;
 }
 
 interface FakeBillProps {
@@ -120,7 +122,7 @@ export default function FakeBill({ patient, onClose }: FakeBillProps) {
         Rv = mid + margin + 44;
 
       let y = 70;
-      doc.setFontSize(9);
+      doc.setFontSize(10);
       const nameLines = doc.splitTextToSize(getFullName(), (pageW / 2 + margin) - Lv - 4);
       doc.text("Name", Lk, y);
       doc.text(":", Lc, y);
@@ -139,6 +141,10 @@ export default function FakeBill({ patient, onClose }: FakeBillProps) {
         doc.text(safe(vR), Rv, y);
         y += 6;
       };
+
+      if (patient.bill_no) {
+        row("Bill No", patient.bill_no, "", "");
+      }
 
       row(
         "Age / Gender",

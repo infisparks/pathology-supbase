@@ -42,6 +42,8 @@ interface DashboardModalsProps {
   formatLocalDateTime: () => string
   amountId: string
   setAmountId: (id: string) => void
+  billNo: string
+  setBillNo: (billNo: string) => void
 }
 
 export function DashboardModals({
@@ -70,6 +72,8 @@ export function DashboardModals({
   formatLocalDateTime,
   amountId,
   setAmountId,
+  billNo,
+  setBillNo,
 }: DashboardModalsProps) {
   // Add handler for sending bill on WhatsApp
   const [isSendingBill, setIsSendingBill] = useState(false)
@@ -256,6 +260,17 @@ export function DashboardModals({
                                 placeholder="Enter amount ID"
                               />
                             </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Bill No (optional)</label>
+                            <input
+                              type="text"
+                              value={billNo}
+                              onChange={(e) => setBillNo(e.target.value)}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Enter Bill No"
+                            />
                           </div>
 
                           <div>
