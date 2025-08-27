@@ -1173,7 +1173,7 @@ const ParamRow: React.FC<RowProps> = ({
             onChange={handleChange}
             onBlur={handleBlur}
             placeholder={"Text (multi-line)"}
-            className="h-6 text-xs min-h-[unset]" // min-h-[unset] to override default min-height
+            className="h-20 w-48 text-xs min-h-[unset]" // Increased height and width for text inputs
           />
         </div>
       )}
