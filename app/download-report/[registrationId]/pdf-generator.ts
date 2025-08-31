@@ -1040,7 +1040,7 @@ export const generateReportPdf = async (
       if (!rangeStr && arr.length) rangeStr = arr[arr.length - 1].rangeValue
     }
   
-    rangeStr = rangeStr.replaceAll("/n", "\n")
+    rangeStr = rangeStr.replaceAll("\\n", "\n")
     const rawValue = String(p.value).trim()
     const valStr = p.value !== "" ? `${p.value}` : "-"
     const rangeEmpty = rangeStr.trim() === ""
@@ -1266,7 +1266,7 @@ export const generateReportPdf = async (
       if (!relevantHistoricalEntries || relevantHistoricalEntries.length === 0) continue
 
       if (!firstTestInComparisonReport) {
-        yPos = await addNewPageWithHeader(data.createdAt)
+        yPos = await addNewPageWithHeader(relevantHistoricalEntries[0].reportedOn)
       }
       firstTestInComparisonReport = false
 
@@ -1280,7 +1280,7 @@ export const generateReportPdf = async (
       const remainingWidthForValues = totalW - fixedColWidthParam - fixedColWidthRange
       const dynamicColWidth = remainingWidthForValues / numDateColumns
 
-      yPos = await ensureSpace(yPos, 20, data.createdAt)
+      yPos = await ensureSpace(yPos, 20, relevantHistoricalEntries[0].reportedOn)
       doc.setDrawColor(0, 51, 102).setLineWidth(0.5)
       doc.line(left, yPos, w - left, yPos)
       doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(0, 51, 102)
@@ -1289,7 +1289,7 @@ export const generateReportPdf = async (
 
       doc.setFontSize(10).setFillColor(0, 51, 102)
       const rowH = 7
-      yPos = await ensureSpace(yPos, rowH, data.createdAt)
+      yPos = await ensureSpace(yPos, rowH, relevantHistoricalEntries[0].reportedOn)
       doc.rect(left, yPos, totalW, rowH, "F")
       doc.setTextColor(255, 255, 255)
 
@@ -1427,7 +1427,7 @@ export const generateReportPdf = async (
       }
 
       for (const param of globalParameters) {
-        yPos = await ensureSpace(yPos, comparisonLineHeight * 2, data.createdAt)
+        yPos = await ensureSpace(yPos, comparisonLineHeight * 2, relevantHistoricalEntries[0].reportedOn)
         yPos = await printComparisonParameterRow(param)
       }
 
@@ -1435,13 +1435,13 @@ export const generateReportPdf = async (
         const rows = currentTestBloodData.parameters.filter((p) => sh.parameterNames.includes(p.name))
         if (!rows.length) continue
 
-        yPos = await ensureSpace(yPos, 6 + comparisonLineHeight * 2, data.createdAt)
+        yPos = await ensureSpace(yPos, 6 + comparisonLineHeight * 2, relevantHistoricalEntries[0].reportedOn)
         doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(0, 51, 102)
         doc.text(sh.title, left, yPos + 5)
         yPos += 6
 
         for (const param of rows) {
-          yPos = await ensureSpace(yPos, comparisonLineHeight * 2, data.createdAt)
+          yPos = await ensureSpace(yPos, comparisonLineHeight * 2, relevantHistoricalEntries[0].reportedOn)
           yPos = await printComparisonParameterRow(param, 2)
         }
       }
@@ -1496,16 +1496,18 @@ export const generateReportPdf = async (
   }
 
   // 3. Main Report Content Pages
-  // Get the first test's reportedOn time for the initial header
-  const initialTestKey = Object.keys(data.bloodtest || {})[0]
-  const firstTestReportedOn = initialTestKey ? data.bloodtest![initialTestKey]?.reportedOn : data.createdAt
+  // Get the reportedOn time for the initial header, prioritizing the first selected test
+  const firstSelectedTestKey = selectedTests.length > 0 ? selectedTests[0] : undefined;
+  const firstTestReportedOn = firstSelectedTestKey && data.bloodtest && data.bloodtest[firstSelectedTestKey]
+    ? data.bloodtest[firstSelectedTestKey].reportedOn
+    : data.createdAt;
 
   console.log("First test setup:", {
-    initialTestKey,
+    firstSelectedTestKey,
     firstTestReportedOn,
     registrationTime: data.createdAt,
     isDifferent: firstTestReportedOn !== data.createdAt,
-  })
+  });
 
   // Add a new page for main content if needed
   if (doc.getNumberOfPages() === 0 || (!skipCover && !includeAiSuggestionsPage)) {
@@ -1579,6 +1581,10 @@ export const generateReportPdf = async (
 
       for (const testKey of testsInGroup) {
         const tData = data.bloodtest![testKey]
+        // Pass the individual test's reportedOn time for new pages within a group
+        if (!firstGroupOrTest && currentY + 20 >= h - footerMargin) { // Check if new page is needed before printing each test
+          currentY = await addNewPageWithHeader(tData.reportedOn);
+        }
         currentY = await printTest(testKey, tData, currentY)
       }
     }
