@@ -71,7 +71,7 @@ export default function XrayPage() {
     visitType: "OPD", // New field for Visit Type with default OPD
     tpa: "No", // New field for TPA with default No
     remark: "", // New field for Remark
-    xrayTests: [{ examination: "", amount: 0, xrayVia: "Price" }],
+    xrayTests: [{ examination: "", amount: 0, xrayVia: "price" }], // Default to "price"
     totalAmount: 0,
     discount: 0,
     payments: [] as { amount: number; paymentMode: string }[],
@@ -177,14 +177,20 @@ export default function XrayPage() {
       const procedureItem = procedureMap[value]
       let amount = 0
 
+      // Automatically set the default xrayVia and amount
+      const isProcedure = isProcedureExamination(value)
+      let xrayVia = isProcedure ? "N/A" : newTests[index].xrayVia; // Keep current via for regular, or set N/A for procedure
+
+      // Specific logic for Medford Hospital's default "Price"
+      if (!isGautamiHospital() && !isProcedure) {
+        xrayVia = "price";
+      } else if (isGautamiHospital() && !isProcedure) {
+        xrayVia = "OPD_Amt";
+      }
+
       if (xrayItem) {
-        // Use the selected via to determine the price
-        const viaKey = newTests[index].xrayVia
-        if (isGautamiHospital()) {
-          amount = xrayItem[viaKey] || 0
-        } else {
-          amount = xrayItem[viaKey] || 0
-        }
+        // Use the new xrayVia to determine the price
+        amount = xrayItem[xrayVia] || 0
       } else if (procedureItem) {
         if (isGautamiHospital()) {
           amount = procedureItem.Amount || 0
@@ -197,11 +203,13 @@ export default function XrayPage() {
         ...newTests[index],
         examination: value,
         amount: amount,
+        xrayVia: xrayVia
       }
       setSearchTerms((prev) => ({ ...prev, [index]: "" }))
     } else if (name === "xrayVia") {
       // When X-ray Via changes, update the amount based on the current examination
       const currentExam = newTests[index].examination
+      const { examinationMap } = getCurrentDataMaps()
       const xrayItem = examinationMap[currentExam]
       let amount = 0
       if (xrayItem) {
@@ -261,6 +269,18 @@ export default function XrayPage() {
     setIsSubmitting(true)
     setMessage("")
     setMessageType("")
+
+    // Validation Check: Ensure xrayVia is selected for non-procedure tests
+    const isXrayViaValid = formData.xrayTests.every(test => {
+      return isProcedureExamination(test.examination) || (test.examination && test.xrayVia);
+    });
+
+    if (!isXrayViaValid) {
+      setIsSubmitting(false)
+      setMessage("Please select a 'X-ray Via' option for all non-procedure examinations.")
+      setMessageType("error")
+      return
+    }
 
     try {
       const amountDetail = {
@@ -322,7 +342,7 @@ export default function XrayPage() {
           visitType: "OPD",
           tpa: "No",
           remark: "",
-          xrayTests: [{ examination: "", amount: 0, xrayVia: "Price" }],
+          xrayTests: [{ examination: "", amount: 0, xrayVia: "price" }],
           totalAmount: 0,
           discount: 0,
           payments: [],
@@ -529,7 +549,7 @@ export default function XrayPage() {
                     >
                       <CalendarDays className="mr-2 h-4 w-4" />
                       {formData.dateOfAppointment ? (
-                        format(formData.dateOfAppointment, "PPP")
+                        <span>{format(formData.dateOfAppointment, "PPP")}</span>
                       ) : (
                         <span>Pick a date</span>
                       )}
