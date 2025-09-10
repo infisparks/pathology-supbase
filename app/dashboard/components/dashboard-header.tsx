@@ -33,6 +33,8 @@ interface DashboardHeaderProps {
   isFiltersExpanded: boolean
   handleToggleFilters: () => void
   isFilterContentMounted: boolean
+  hospitalFilterTerm: string
+  setHospitalFilterTerm: (term: string) => void
 }
 
 export function DashboardHeader({
@@ -53,6 +55,8 @@ export function DashboardHeader({
   isFiltersExpanded,
   handleToggleFilters,
   isFilterContentMounted,
+  hospitalFilterTerm,
+  setHospitalFilterTerm,
 }: DashboardHeaderProps) {
   const filterContentRef = useRef<HTMLDivElement>(null)
 
@@ -199,6 +203,16 @@ export function DashboardHeader({
                   <option value="notCollected">Not Collected</option>
                   <option value="sampleCollected">Pending</option>
                   <option value="completed">Completed</option>
+                </select>
+                 <select
+                  value={hospitalFilterTerm}
+                  onChange={(e) => setHospitalFilterTerm(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-stone-500 focus:border-transparent text-sm"
+                >
+                  <option value="all">All Hospitals</option>
+                  <option value="MEDFORD HOSPITAL">MEDFORD HOSPITAL</option>
+                  <option value="Gautami Medford NX Hospital">Gautami Medford NX Hospital</option>
+                  <option value="Apex Clinic">Apex Clinic</option>
                 </select>
               </div>
             )}

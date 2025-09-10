@@ -72,6 +72,7 @@ export default function Dashboard() {
   const [showCheckboxes, setShowCheckboxes] = useState<boolean>(false)
   const [isFiltersExpanded, setIsFiltersExpanded] = useState<boolean>(false)
   const [isFilterContentMounted, setIsFilterContentMounted] = useState<boolean>(false)
+  const [hospitalFilterTerm, setHospitalFilterTerm] = useState<string>("all")
 
   const [isLoading, setIsLoading] = useState(true)
 
@@ -433,9 +434,11 @@ export default function Dashboard() {
           break
       }
 
+      if (hospitalFilterTerm !== "all" && r.hospitalName !== hospitalFilterTerm) return false
+
       return true
     })
-  }, [registrations, searchTerm, startDate, endDate, statusFilter, role, dbSearchResults])
+  }, [registrations, searchTerm, startDate, endDate, statusFilter, role, dbSearchResults, hospitalFilterTerm])
 
   /* --- actions --- */
   const handleSaveSampleDate = useCallback(async () => {
@@ -612,11 +615,13 @@ export default function Dashboard() {
       setBillNo("")
       setPaymentMode("online")
       alert("Payment and discount updated successfully!")
+      fetchRegistrations() // Explicitly call to refresh the list
+      fetchDashboardStats() // Explicitly call to refresh dashboard stats
     } catch (error: any) {
       console.error("Dashboard: Error updating payment and discount:", error.message)
       alert("Error updating payment and discount. Please try again.")
     }
-  }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode, amountId, billNo])
+  }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode, amountId, billNo, fetchRegistrations, fetchDashboardStats])
   // ---------- END FIXED PART ----------
 
   // When passing to FakeBill, ensure TPA price is used if tpa is true
@@ -656,6 +661,8 @@ export default function Dashboard() {
             isFiltersExpanded={isFiltersExpanded}
             handleToggleFilters={handleToggleFilters}
             isFilterContentMounted={isFilterContentMounted}
+            hospitalFilterTerm={hospitalFilterTerm}
+            setHospitalFilterTerm={setHospitalFilterTerm}
           />
 
           <RegistrationList
