@@ -38,6 +38,8 @@ interface Registration {
   } | null
   visit_type: string
   doctor_name: string
+  name?: string // Added patient name
+  contact?: string // Added patient contact number
 }
 
 type DateRangeOption = "today" | "last7days" | "thismonth" | "custom"
@@ -51,11 +53,20 @@ export default function BillingPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [hospitalFilterTerm, setHospitalFilterTerm] = useState<string>("all")
 
   // Wrap fetchRegistrations in useCallback
   const fetchRegistrations = useCallback(async () => {
     setLoading(true)
-    let query = supabase.from("registration").select("*")
+    let query = supabase.from("registration").select(
+      `
+      *,
+      patientdetial(
+        name,
+        number
+      )
+      `
+    )
 
     // Apply date filters
     if (startDate && endDate) {
@@ -63,9 +74,14 @@ export default function BillingPage() {
       query = query.lte("created_at", format(endOfDay(endDate), "yyyy-MM-dd HH:mm:ss.SSSxxx"))
     }
 
-    // Apply search filter (still on registration ID)
+    // Apply search filter (Registration ID, Patient Name, or Patient Number)
     if (searchQuery) {
-      query = query.ilike("id", `%${searchQuery}%`)
+      query = query.or(`id.ilike.%${searchQuery}%,patientdetial.name.ilike.%${searchQuery}%,patientdetial.number.ilike.%${searchQuery}%`)
+    }
+
+    // Apply hospital filter
+    if (hospitalFilterTerm !== "all") {
+      query = query.eq("hospital_name", hospitalFilterTerm)
     }
 
     const { data, error } = await query.order("created_at", { ascending: false })
@@ -73,14 +89,16 @@ export default function BillingPage() {
     if (error) {
       console.error("Error fetching registrations:", error)
     } else {
-      const parsedData = data.map((reg) => ({
+      const parsedData = data.map((reg: any) => ({
         ...reg,
+        name: reg.patientdetial?.name || "",
+        contact: reg.patientdetial?.number || "",
         amount_paid_history: reg.amount_paid_history as unknown as Registration["amount_paid_history"],
       }))
       setRegistrations(parsedData)
     }
     setLoading(false)
-  }, [startDate, endDate, searchQuery]) // Dependencies for useCallback
+  }, [startDate, endDate, searchQuery, hospitalFilterTerm]) // Dependencies for useCallback
 
   useEffect(() => {
     fetchRegistrations()
@@ -169,8 +187,8 @@ export default function BillingPage() {
         return [{
           "Registration ID": reg.id,
           "Patient ID": reg.patient_id,
-          "User Name": reg.patient_id, // Replace with actual user name if available
-          "User Number": "", // Replace with actual user number if available
+          "User Name": reg.name || reg.patient_id, // Use name if available, otherwise patient_id
+          "User Number": reg.contact || "", // Use contact if available, otherwise empty
           "Payment Method": reg.payment_mode,
           "Payment ID": "",
           "TPA": reg.visit_type === 'TPA' ? 'Yes' : 'No',
@@ -185,8 +203,8 @@ export default function BillingPage() {
       return paymentHistory.map((p) => ({
         "Registration ID": reg.id,
         "Patient ID": reg.patient_id,
-        "User Name": reg.patient_id, // Replace with actual user name if available
-        "User Number": "", // Replace with actual user number if available
+        "User Name": reg.name || reg.patient_id, // Use name if available, otherwise patient_id
+        "User Number": reg.contact || "", // Use contact if available, otherwise empty
         "Payment Method": p.paymentMode,
         "Payment ID": p.amountId || "",
         "TPA": reg.visit_type === 'TPA' ? 'Yes' : 'No',
@@ -324,6 +342,16 @@ export default function BillingPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        <select
+          value={hospitalFilterTerm}
+          onChange={(e) => setHospitalFilterTerm(e.target.value)}
+          className="w-full md:w-auto p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+        >
+          <option value="all">All Hospitals</option>
+          <option value="MEDFORD HOSPITAL">MEDFORD HOSPITAL</option>
+          <option value="Gautami Medford NX Hospital">Gautami Medford NX Hospital</option>
+          <option value="Apex Clinic">Apex Clinic</option>
+        </select>
       </div>
 
       {/* Add Export to Excel button above the table */}

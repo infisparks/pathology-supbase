@@ -10,6 +10,7 @@ import { signOut } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { useUserRole } from '@/hooks/useUserRole'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
 
 const sidebarItems = [
   { icon: Home, label: 'Dashboard', href: '/dashboard', roles: ['admin', 'technician', 'phlebo'] },
@@ -149,7 +150,7 @@ export default function Sidebar() {
               
               return (
                 <li key={item.href}>
-                  <a
+                  <Link
                     href={item.href}
                     className={cn(
                       "flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
@@ -161,7 +162,7 @@ export default function Sidebar() {
                   >
                     <Icon className="w-5 h-5 flex-shrink-0" />
                     {!isCollapsed && <span>{item.label}</span>}
-                  </a>
+                  </Link>
                 </li>
               )
             })}
