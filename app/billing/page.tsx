@@ -130,7 +130,8 @@ export default function BillingPage() {
   const totalAmountAfterDiscount = useMemo(() => {
     return registrations.reduce((sum, reg) => {
       const totalBill = reg.amount_paid_history?.totalAmount || 0
-      return sum + (totalBill - reg.discount_amount)
+      const discount = reg.amount_paid_history?.discount || reg.discount_amount || 0;
+      return sum + (totalBill - discount)
     }, 0)
   }, [registrations])
 
@@ -164,7 +165,6 @@ export default function BillingPage() {
     }, 0)
   }, [registrations])
 
-  // FIX: Correctly calculate total remaining amount by subtracting collected amount from the total bill after discount
   const totalRemaining = useMemo(() => {
     return registrations.reduce((sum, reg) => {
       const totalBill = reg.amount_paid_history?.totalAmount || 0
@@ -233,7 +233,7 @@ export default function BillingPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         <Card className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Bill</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">₹{totalAmount.toLocaleString()}</div>
@@ -245,6 +245,15 @@ export default function BillingPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">₹{totalDiscount.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+        {/* NEW CARD: Total Bill After Discount */}
+        <Card className="bg-gradient-to-r from-teal-500 to-cyan-600 text-white">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Total Bill After Discount</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">₹{totalAmountAfterDiscount.toLocaleString()}</div>
           </CardContent>
         </Card>
         <Card className="bg-gradient-to-r from-yellow-500 to-orange-600 text-white">
