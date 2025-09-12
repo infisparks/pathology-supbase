@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
-import { CalendarIcon, Search, DollarSign, History, Loader2 } from "lucide-react"
+import { CalendarIcon, Search, History, Loader2 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
@@ -164,11 +164,14 @@ export default function BillingPage() {
     }, 0)
   }, [registrations])
 
+  // FIX: Correctly calculate total remaining amount by subtracting collected amount from the total bill after discount
   const totalRemaining = useMemo(() => {
     return registrations.reduce((sum, reg) => {
       const totalBill = reg.amount_paid_history?.totalAmount || 0
+      const discount = reg.amount_paid_history?.discount || reg.discount_amount || 0
       const collected = reg.amount_paid_history?.paymentHistory?.reduce((s, p) => s + (p.amount || 0), 0) || 0
-      return sum + (totalBill - collected)
+      const billAfterDiscount = totalBill - discount;
+      return sum + (billAfterDiscount - collected)
     }, 0)
   }, [registrations])
 
@@ -399,7 +402,8 @@ export default function BillingPage() {
                     const cash = paymentHistory.filter(p => p.paymentMode === 'cash').reduce((s, p) => s + (p.amount || 0), 0)
                     const online = paymentHistory.filter(p => p.paymentMode === 'online').reduce((s, p) => s + (p.amount || 0), 0)
                     const collected = paymentHistory.reduce((s, p) => s + (p.amount || 0), 0)
-                    const remaining = totalBill - collected
+                    // FIX: Calculate remaining after subtracting discount and collected amount
+                    const remaining = (totalBill - discount) - collected
                     return (
                       <TableRow
                         key={reg.id}
@@ -464,12 +468,16 @@ export default function BillingPage() {
                   ).toLocaleString()}
                 </div>
                 <div>
-                  <strong>Collected Amount:</strong> ₹{selectedRegistration.amount_paid.toLocaleString()}
+                  <strong>Collected Amount:</strong> ₹
+                  {selectedRegistration.amount_paid_history?.paymentHistory?.reduce((s, p) => s + (p.amount || 0), 0).toLocaleString() || "N/A"}
                 </div>
+                {/* FIX: Correctly calculate remaining amount in the modal */}
                 <div>
                   <strong>Remaining Amount:</strong> ₹
                   {(
-                    (selectedRegistration.amount_paid_history?.totalAmount || 0) - selectedRegistration.amount_paid
+                    (selectedRegistration.amount_paid_history?.totalAmount || 0) -
+                    (selectedRegistration.amount_paid_history?.discount || selectedRegistration.discount_amount || 0) -
+                    (selectedRegistration.amount_paid_history?.paymentHistory?.reduce((s, p) => s + (p.amount || 0), 0) || 0)
                   ).toLocaleString()}
                 </div>
               </div>
