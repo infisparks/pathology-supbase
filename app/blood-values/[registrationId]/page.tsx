@@ -187,17 +187,27 @@ const getFormDataForPreview = (
           const strValue = String(p.value);
           if (/^[<>]/.test(strValue)) {
             obj.value = strValue;
-          } else if (p.valueType === "number" && p.value !== "") {
-            const numValue = +p.value;
-            obj.value = strValue.includes(".") && strValue.endsWith("0") ? strValue : numValue;
+          } else if (p.valueType === "number" && strValue !== "") {
+            const numValue = Number(strValue);
+            // Explicitly handle '-' and '.' as strings for number type fields
+            if (strValue === "-" || strValue === ".") {
+              obj.value = strValue;
+            } else {
+              obj.value = isNaN(numValue) ? strValue : (strValue.includes(".") && strValue.endsWith("0") ? strValue : numValue);
+            }
           }
           subs.forEach((sp) => {
             const spStr = String(sp.value);
             if (/^[<>]/.test(spStr)) {
               sp.value = spStr;
-            } else if (sp.valueType === "number" && sp.value !== "") {
-              const spNum = +sp.value;
-              sp.value = spStr.includes(".") && spStr.endsWith("0") ? spStr : spNum;
+            } else if (sp.valueType === "number" && spStr !== "") {
+              const spNum = Number(spStr);
+              // Explicitly handle '-' and '.' as strings for subparameter number type fields
+              if (spStr === "-" || spStr === ".") {
+                sp.value = spStr;
+              } else {
+                sp.value = isNaN(spNum) ? spStr : (spStr.includes(".") && spStr.endsWith("0") ? spStr : spNum);
+              }
             }
           });
           return obj;
@@ -556,17 +566,24 @@ const BloodValuesForm: React.FC = () => {
 
   /* ══════════════ Numeric Change: allow up to 3 decimal places or “<” / “>” prefixes ══════════════ */
   const numericChange = (v: string, t: number, p: number, sp?: number) => {
-    if (v === "" || v === "-") {
-      // allow empty or single minus
+    if (v === "") {
+      // Allow empty string
     } else {
-      // allow numbers with up to 3 decimals, optionally prefixed by “<” or “>”
-      const regex = /^[<>]?-?\d*(\.\d{0,3})?$/
-      if (!regex.test(v)) return
+      // Check for valid number format (up to 3 decimals, optional < or > prefix)
+      const numericRegex = /^[<>]?-?\d*(\.\d{0,3})?$/;
+      if (numericRegex.test(v)) {
+        // It's a valid numeric-like string, proceed
+      } else {
+        // It's not a number or numeric-like string, so treat as generic text
+        const path = sp == null ? `tests.${t}.parameters.${p}.value` : `tests.${t}.parameters.${p}.subparameters.${sp}.value`;
+        setValue(path as Path<BloodValuesFormInputs>, v, { shouldValidate: false });
+        return;
+      }
     }
     const path =
-      sp == null ? `tests.${t}.parameters.${p}.value` : `tests.${t}.parameters.${p}.subparameters.${sp}.value`
-    setValue(path as Path<BloodValuesFormInputs>, v, { shouldValidate: false })
-  }
+      sp == null ? `tests.${t}.parameters.${p}.value` : `tests.${t}.parameters.${p}.subparameters.${sp}.value`;
+    setValue(path as Path<BloodValuesFormInputs>, v, { shouldValidate: false });
+  };
 
   /* ══════════════ Build suggestions for text inputs ══════════════ */
   const buildMatches = (param: TestParameterValue, q: string): string[] => {
@@ -653,17 +670,27 @@ const BloodValuesForm: React.FC = () => {
               const strValue = String(p.value)
               if (/^[<>]/.test(strValue)) {
                 obj.value = strValue
-              } else if (p.valueType === "number" && p.value !== "") {
-                const numValue = +p.value
-                obj.value = strValue.includes(".") && strValue.endsWith("0") ? strValue : numValue
+              } else if (p.valueType === "number" && strValue !== "") {
+                const numValue = Number(strValue)
+                // Explicitly handle '-' and '.' as strings for number type fields
+                if (strValue === "-" || strValue === ".") {
+                  obj.value = strValue;
+                } else {
+                  obj.value = isNaN(numValue) ? strValue : (strValue.includes(".") && strValue.endsWith("0") ? strValue : numValue)
+                }
               }
               subs.forEach((sp) => {
                 const spStr = String(sp.value)
                 if (/^[<>]/.test(spStr)) {
                   sp.value = spStr
-                } else if (sp.valueType === "number" && sp.value !== "") {
-                  const spNum = +sp.value
-                  sp.value = spStr.includes(".") && spStr.endsWith("0") ? spStr : spNum
+                } else if (sp.valueType === "number" && spStr !== "") {
+                  const spNum = Number(spStr);
+                  // Explicitly handle '-' and '.' as strings for subparameter number type fields
+                  if (spStr === "-" || spStr === ".") {
+                    sp.value = spStr;
+                  } else {
+                    sp.value = isNaN(spNum) ? spStr : (spStr.includes(".") && spStr.endsWith("0") ? spStr : spNum);
+                  }
                 }
               })
               return obj
