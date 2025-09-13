@@ -902,22 +902,26 @@ function DownloadReport() {
                                     <span className="font-medium">Name:</span> {patientData.title ? `${patientData.title} ` : ""}
                                     {patientData.name}
                                 </div>
-                                <div>
-                                    <span className="font-medium">Patient ID:</span>{" "}
-                                    {patientData.patientId && patientData.registration_id
-                                        ? `${patientData.patientId}-${patientData.registration_id}`
-                                        : patientData.patientId || patientData.registration_id || "-"}
-                                </div>
-                                <div>
-                                    <span className="font-medium">Age/Gender:</span> {patientData.age}{" "}
-                                    {patientData.day_type || "Years"} / {patientData.gender}
-                                </div>
-                                <div>
-                                    <span className="font-medium">Contact:</span>{" "}
-                                    {patientData.contact
-                                        ? patientData.contact
-                                        : <span className="text-gray-400 italic">Not provided</span>}
-                                </div>
+                                {(patientData.patientId || patientData.registration_id) && (
+                                    <div>
+                                        <span className="font-medium">Patient ID:</span>{" "}
+                                        {patientData.patientId && patientData.registration_id
+                                            ? `${patientData.patientId}-${patientData.registration_id}`
+                                            : patientData.patientId || patientData.registration_id || "-"}
+                                    </div>
+                                )}
+                                {patientData.age && (
+                                    <div>
+                                        <span className="font-medium">Age/Gender:</span> {patientData.age}{" "}
+                                        {patientData.day_type || "Years"} / {patientData.gender}
+                                    </div>
+                                )}
+                                {patientData.contact && (
+                                    <div>
+                                        <span className="font-medium">Contact:</span>{" "}
+                                        {patientData.contact}
+                                    </div>
+                                )}
                             </div>
                         </div>
 

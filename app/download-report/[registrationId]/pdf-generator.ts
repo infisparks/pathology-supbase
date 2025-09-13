@@ -1025,6 +1025,11 @@ export const generateReportPdf = async (
   }
 
   const printRow = async (p: Parameter, y: number, reportedOnRaw?: string, indent = 0): Promise<number> => {
+    // If the parameter value is null, undefined, or an empty string, do not display it.
+    if (p.value === null || p.value === undefined || String(p.value).trim() === "") {
+      return y; // Return current Y position without printing anything
+    }
+
     let rangeStr = ""
     if (typeof p.range === "string") {
       rangeStr = p.range
@@ -1314,6 +1319,12 @@ export const generateReportPdf = async (
       const globalParameters = currentTestBloodData.parameters.filter((p) => !subNames.includes(p.name))
 
       const printComparisonParameterRow = async (param: Parameter, indent = 0): Promise<number> => {
+        // If the parameter value is null, undefined, or an empty string, do not display it.
+        // We check for param.value from the original parameter object (param), not from latestParamInstance.
+        if (param.value === null || param.value === undefined || String(param.value).trim() === "") {
+          return yPos; // Return current Y position without printing anything
+        }
+
         let maxRowHeight = comparisonLineHeight
         let isTextParameter = false
         let latestParamInstance: Parameter | undefined
