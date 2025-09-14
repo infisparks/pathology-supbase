@@ -166,7 +166,10 @@ export default function Dashboard() {
             discountAmount: registrationRow.discount_amount || 0,
             amountPaid: registrationRow.amount_paid || 0,
             doctor_name: registrationRow.doctor_name,
-            bloodTests: registrationRow.bloodtest_data || [],
+            bloodTests: (registrationRow.bloodtest_data || []).map((test: any) => ({ // Ensure test.testName is a string
+              ...test,
+              testName: String(test.testName || ""),
+            })),
             bloodtest: registrationRow.bloodtest_detail || {},
             sampleCollectedAt: registrationRow.samplecollected_time,
             paymentHistory: registrationRow.amount_paid_history || null,
@@ -267,15 +270,18 @@ export default function Dashboard() {
           discountAmount: registrationRow.discount_amount || 0,
           amountPaid: registrationRow.amount_paid || 0,
           doctor_name: registrationRow.doctor_name,
-          bloodTests: registrationRow.bloodtest_data || [],
+          bloodTests: (registrationRow.bloodtest_data || []).map((test: any) => ({ // Ensure test.testName is a string
+            ...test,
+            testName: String(test.testName || ""),
+          })),
           bloodtest: registrationRow.bloodtest_detail || {},
           sampleCollectedAt: registrationRow.samplecollected_time,
           paymentHistory: registrationRow.amount_paid_history || null,
           hospitalName: registrationRow.hospital_name,
-          patient_id: patientDetail.patient_id || "", // Ensure patient_id from patientdetial is used
-          name: patientDetail.name || "Unknown",
-          patientId: patientDetail.patient_id || "",
-          age: patientDetail.age || 0,
+          patient_id: patientDetail?.patient_id ?? "", // Ensure patient_id from patientdetial is used
+          name: patientDetail?.name ?? "Unknown",
+          patientId: patientDetail?.patient_id ?? "",
+          age: patientDetail?.age ?? 0,
           gender: patientDetail.gender,
           contact: patientDetail.number,
           address: patientDetail.address,
@@ -370,15 +376,18 @@ export default function Dashboard() {
               discountAmount: registrationRow.discount_amount || 0,
               amountPaid: registrationRow.amount_paid || 0,
               doctor_name: registrationRow.doctor_name,
-              bloodTests: registrationRow.bloodtest_data || [],
+              bloodTests: (registrationRow.bloodtest_data || []).map((test: any) => ({ // Ensure test.testName is a string
+                ...test,
+                testName: String(test.testName || ""),
+              })),
               bloodtest: registrationRow.bloodtest_detail || {},
               sampleCollectedAt: registrationRow.samplecollected_time,
               paymentHistory: registrationRow.amount_paid_history || null,
               hospitalName: registrationRow.hospital_name,
-              patient_id: patientDetail.patient_id || "", // Ensure patient_id from patientdetial is used
-              name: patientDetail.name || "Unknown",
-              patientId: patientDetail.patient_id || "",
-              age: patientDetail.age || 0,
+              patient_id: patientDetail?.patient_id ?? "", // Ensure patient_id from patientdetial is used
+              name: patientDetail?.name ?? "Unknown",
+              patientId: patientDetail?.patient_id ?? "",
+              age: patientDetail?.age ?? 0,
               gender: patientDetail.gender,
               contact: patientDetail.number,
               address: patientDetail.address,
@@ -411,9 +420,9 @@ export default function Dashboard() {
       const term = searchTerm.trim().toLowerCase()
       const matchesSearch =
         !term ||
-        r.name.toLowerCase().includes(term) ||
+        (r.name && r.name.toLowerCase().includes(term)) ||
         (r.contact ? r.contact.toString().includes(term) : false) ||
-        r.patientId.toLowerCase().includes(term)
+        (r.patientId && r.patientId.toLowerCase().includes(term))
       if (!matchesSearch) return false
 
       const regDate = new Date(r.createdAt)
