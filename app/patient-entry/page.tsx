@@ -307,7 +307,7 @@ export default function PatientEntry() {
   )
 
   /** handlers */
-  function handlePatientSelect(p: PatientSuggestion) {
+  async function handlePatientSelect(p: PatientSuggestion) {
     setValue("name", p.name)
     setValue("contact", p.number.toString())
     setValue("age", p.age)
@@ -319,6 +319,23 @@ export default function PatientEntry() {
     setValue("existingPatientId", p.id) // Store the existing patient's database ID
     setIsExistingPatient(true)
     setShowPatientHints(false)
+
+    // NEW LOGIC: Fetch doctor name from the latest registration
+    const { data: registrationData, error: registrationError } = await supabase
+        .from(TABLE.REGISTRATION)
+        .select("doctor_name")
+        .eq("patient_id", p.id)
+        .order("registration_time", { ascending: false })
+        .limit(1)
+
+    if (registrationError) {
+        console.error("Error fetching latest registration:", registrationError)
+    } else if (registrationData && registrationData.length > 0) {
+        setValue("doctorName", registrationData[0].doctor_name || "")
+    } else {
+        // If no past registration is found, clear the doctor name field
+        setValue("doctorName", "")
+    }
   }
 
   function handleNewPatient() {
@@ -551,6 +568,7 @@ export default function PatientEntry() {
                             setValue("name", "")
                             setValue("contact", "")
                             setValue("patientId", "")
+                            setValue("doctorName", "") // Clear doctor name as well
                           }}
                         >
                           Clear & Add New
