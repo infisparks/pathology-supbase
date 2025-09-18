@@ -133,8 +133,8 @@ export default function Dashboard() {
   const fetchDashboardStats = useCallback(async () => {
     try {
       const today = new Date().toISOString().split("T")[0]
-      const start = startDate && startDate.trim() ? new Date(`${startDate}T00:00:00`) : new Date(`${today}T00:00:00`)
-      const end = endDate && endDate.trim() ? new Date(`${endDate}T23:59:59`) : new Date(`${today}T23:59:59`)
+      const start = startDate && startDate.trim() ? `${startDate}T00:00:00.000Z` : `${today}T00:00:00.000Z`
+      const end = endDate && endDate.trim() ? `${endDate}T23:59:59.999Z` : `${today}T23:59:59.999Z`
 
       // Fetch all registrations to calculate totals and pending reports accurately
       const { data: allRegistrationsData, error: allRegistrationsError } = await supabase
@@ -147,6 +147,9 @@ export default function Dashboard() {
         )
       `
         )
+        .gte("registration_time", start)
+        .lte("registration_time", end)
+
       if (allRegistrationsError) throw allRegistrationsError
 
       let totalRegistrationsCount = 0;
@@ -189,11 +192,11 @@ export default function Dashboard() {
         });
 
         mappedRegistrations.forEach((reg) => {
-          // Check if registration is within the date range
-          const regDate = new Date(reg.createdAt)
-          const isInDateRange = regDate >= start && regDate <= end
+          // Check if registration is within the date range - REMOVED, now filtered by DB
+          // const regDate = new Date(reg.createdAt)
+          // const isInDateRange = regDate >= start && regDate <= end
 
-          if (isInDateRange) {
+          // if (isInDateRange) {
             totalRegistrationsCount++;
 
             let regRevenue = 0
@@ -218,7 +221,7 @@ export default function Dashboard() {
             } else if (sampleCollected && !complete) {
               pendingReportsCount++;
             }
-          }
+          // }
         })
       }
 
@@ -236,10 +239,10 @@ export default function Dashboard() {
   }, [startDate, endDate])
 
   // Fetch Registrations (all data)
-  const fetchRegistrations = useCallback(async () => {
+  const fetchRegistrations = useCallback(async (startDate: string, endDate: string) => {
     setIsLoading(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("registration")
         .select(
           `
@@ -252,6 +255,13 @@ export default function Dashboard() {
         `,
         )
         .order("registration_time", { ascending: false })
+
+      if (startDate && endDate) {
+        query = query.gte("registration_time", `${startDate}T00:00:00.000Z`)
+        query = query.lte("registration_time", `${endDate}T23:59:59.999Z`)
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.error("Dashboard: Supabase fetch registrations error:", error)
@@ -311,7 +321,7 @@ export default function Dashboard() {
     const registrationChannel = supabase
       .channel("registration_changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "registration" }, (payload) => {
-        fetchRegistrations()
+        fetchRegistrations(startDate, endDate)
         fetchDashboardStats()
       })
       .subscribe()
@@ -319,7 +329,7 @@ export default function Dashboard() {
     const patientDetialChannel = supabase
       .channel("patient_detial_changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "patientdetial" }, (payload) => {
-        fetchRegistrations()
+        fetchRegistrations(startDate, endDate)
         fetchDashboardStats()
       })
       .subscribe()
@@ -328,13 +338,13 @@ export default function Dashboard() {
       supabase.removeChannel(registrationChannel)
       supabase.removeChannel(patientDetialChannel)
     }
-  }, [fetchRegistrations, fetchDashboardStats])
+  }, [fetchRegistrations, fetchDashboardStats, startDate, endDate])
 
   // Initial load
   useEffect(() => {
-    fetchRegistrations()
+    fetchRegistrations(startDate, endDate)
     fetchDashboardStats()
-  }, [fetchRegistrations, fetchDashboardStats])
+  }, [fetchRegistrations, fetchDashboardStats, startDate, endDate])
 
   // Update dashboard stats when date filters change
   useEffect(() => {
@@ -426,8 +436,8 @@ export default function Dashboard() {
       if (!matchesSearch) return false
 
       const regDate = new Date(r.createdAt)
-      if (start && regDate < start) return false
-      if (end && regDate > end) return false
+      // if (start && regDate < start) return false
+      // if (end && regDate > end) return false
 
       const sampleCollected = !!r.sampleCollectedAt
       const complete = isAllTestsComplete(r)
@@ -461,14 +471,14 @@ export default function Dashboard() {
         .eq("id", sampleModalRegistration.id)
       if (error) throw error
       alert(`Sample time updated for ${sampleModalRegistration.name}`)
-      fetchRegistrations()
+      fetchRegistrations(startDate, endDate)
     } catch (e: any) {
       console.error("Dashboard: Error saving sample time:", e.message)
       alert("Error saving sample time.")
     } finally {
       setSampleModalRegistration(null)
     }
-  }, [sampleModalRegistration, sampleDateTime, fetchRegistrations])
+  }, [sampleModalRegistration, sampleDateTime, fetchRegistrations, startDate, endDate])
 
   const handleDeleteRegistration = useCallback(
     async (r: Registration) => {
@@ -624,13 +634,13 @@ export default function Dashboard() {
       setBillNo("")
       setPaymentMode("online")
       alert("Payment and discount updated successfully!")
-      fetchRegistrations() // Explicitly call to refresh the list
+      fetchRegistrations(startDate, endDate) // Explicitly call to refresh the list
       fetchDashboardStats() // Explicitly call to refresh dashboard stats
     } catch (error: any) {
       console.error("Dashboard: Error updating payment and discount:", error.message)
       alert("Error updating payment and discount. Please try again.")
     }
-  }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode, amountId, billNo, fetchRegistrations, fetchDashboardStats])
+  }, [selectedRegistration, newAmountPaid, tempDiscount, paymentMode, amountId, billNo, fetchRegistrations, fetchDashboardStats, startDate, endDate])
   // ---------- END FIXED PART ----------
 
   // When passing to FakeBill, ensure TPA price is used if tpa is true
