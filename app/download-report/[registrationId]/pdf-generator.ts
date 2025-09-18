@@ -414,112 +414,157 @@ const parseHTMLContent = (doc: jsPDF, htmlContent: string, x: number, y: number,
     doc.text(lines, x, currentY)
     return currentY + lines.length * lineHeight
   }
-  const processNode = (node: Node): void => {
+
+  const processNode = (node: Node, currentX: number, currentY: number): [number, number] => {
+    let xOffset = currentX;
+    let yOffset = currentY;
+    
     if (node.nodeType === Node.TEXT_NODE) {
-      const text = decodeHTMLEntities(node.textContent?.trim() || "")
-      if (text) {
-        const lines = doc.splitTextToSize(text, maxWidth)
-        doc.setFont("helvetica", "normal").setFontSize(9)
-        doc.text(lines, x, currentY)
-        currentY += lines.length * lineHeight
-      }
+      const text = decodeHTMLEntities(node.textContent || "");
+      const textLines = text.split("\n");
+
+      textLines.forEach((line, index) => {
+        // Handle bold/italic within a single line
+        const parts = line.split(/(<strong\>|<\/strong\>|<b\>|<\/b\>|<em\>|<\/em\>|<i\>|<\/i\>)/i);
+        parts.forEach((part: string, textIndex: number) => {
+          if (!part.trim()) return;
+
+          const parent = node.parentNode as Element;
+          let fontStyle = "normal";
+
+          if (part.toLowerCase() === '<b>' || part.toLowerCase() === '<strong>') {
+            doc.setFont("helvetica", "bold");
+          } else if (part.toLowerCase() === '</b>' || part.toLowerCase() === '</strong>') {
+            doc.setFont("helvetica", "normal");
+          } else if (part.toLowerCase() === '<i>' || part.toLowerCase() === '<em>') {
+            doc.setFont("helvetica", "italic");
+          } else if (part.toLowerCase() === '</i>' || part.toLowerCase() === '</em>') {
+            doc.setFont("helvetica", "normal");
+          } else {
+            const textParts = doc.splitTextToSize(part, maxWidth - (xOffset - x));
+            
+            textParts.forEach((textPart: string, textIndex: number) => {
+              if (textIndex > 0) {
+                yOffset += lineHeight;
+                xOffset = x;
+              }
+              
+              const textWidth = doc.getTextWidth(textPart);
+              doc.text(textPart, xOffset, yOffset);
+              xOffset += textWidth;
+            });
+          }
+        });
+
+        if (index < textLines.length - 1) {
+          yOffset += lineHeight;
+          xOffset = x;
+        }
+      });
     } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const element = node as Element
-      const tagName = element.tagName.toLowerCase()
-      const styles = parseInlineCSS(element.getAttribute("style") || "")
-      if (tagName === "table") {
-        currentY = renderTable(doc, parseTable(element), x, currentY, maxWidth)
-        return
-      }
+      const element = node as Element;
+      const tagName = element.tagName.toLowerCase();
+      const styles = parseInlineCSS(element.getAttribute("style") || "");
+
+      const prevX = xOffset;
+      const prevY = yOffset;
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(0, 0, 0);
+
       if (Object.keys(styles).length > 0) {
-        applyCSSStyles(doc, styles)
+        applyCSSStyles(doc, styles);
       } else {
         switch (tagName) {
           case "h1":
-            doc.setFont("helvetica", "bold").setFontSize(14)
-            currentY += 2
-            break
+            doc.setFont("helvetica", "bold").setFontSize(14);
+            break;
           case "h2":
-            doc.setFont("helvetica", "bold").setFontSize(12)
-            currentY += 2
-            break
+            doc.setFont("helvetica", "bold").setFontSize(12);
+            break;
           case "h3":
-            doc.setFont("helvetica", "bold").setFontSize(11)
-            currentY += 1
-            break
+            doc.setFont("helvetica", "bold").setFontSize(11);
+            break;
           case "h4":
           case "h5":
           case "h6":
-            doc.setFont("helvetica", "bold").setFontSize(10)
-            currentY += 1
-            break
+            doc.setFont("helvetica", "bold").setFontSize(10);
+            break;
           case "strong":
           case "b":
-            doc.setFont("helvetica", "bold").setFontSize(9)
-            break
+            doc.setFont("helvetica", "bold").setFontSize(9);
+            break;
           case "em":
           case "i":
-            doc.setFont("helvetica", "italic").setFontSize(9)
-            break
+            doc.setFont("helvetica", "italic").setFontSize(9);
+            break;
           case "u":
-            doc.setFont("helvetica", "normal").setFontSize(9)
-            break
+            doc.setFont("helvetica", "normal").setFontSize(9);
+            break;
           case "p":
-            doc.setFont("helvetica", "normal").setFontSize(9)
-            // This adds a default margin for paragraphs, which can cause excess space
-            // We will try to manage this globally or by ensuring the HTML is tight.
-            if (currentY > y) currentY += 2
-            break
+          case "div":
+            if (element.innerHTML.trim() !== '') {
+              yOffset += lineHeight;
+              xOffset = x;
+            }
+            break;
           case "br":
-            currentY += lineHeight
-            return
+            yOffset += lineHeight;
+            xOffset = x;
+            return [xOffset, yOffset];
           case "li":
-            doc.setFont("helvetica", "normal").setFontSize(9)
-            doc.text("• ", x, currentY)
-            const bulletWidth = doc.getTextWidth("• ")
-            const listText = decodeHTMLEntities(element.textContent?.trim() || "")
-            const listLines = doc.splitTextToSize(listText, maxWidth - bulletWidth)
-            doc.text(listLines, x + bulletWidth, currentY)
-            currentY += listLines.length * lineHeight
-            return
+            doc.text("• ", x, yOffset + lineHeight);
+            xOffset = x + doc.getTextWidth("• ");
+            yOffset += lineHeight;
+            break;
           case "ul":
           case "ol":
-            currentY += 1
-            break
-          case "thead":
-          case "tbody":
-          case "tr":
-          case "th":
-          case "td":
-            return
-          default:
-            doc.setFont("helvetica", "normal").setFontSize(9)
+            yOffset += 2;
+            xOffset = x;
+            break;
+          case "table":
+            yOffset = renderTable(doc, parseTable(element), x, yOffset, maxWidth);
+            xOffset = x;
+            return [xOffset, yOffset];
         }
       }
-      if (tagName === "div" || tagName === "span") {
-        if (styles.backgroundColor) {
-          const bgColor = parseColor(styles.backgroundColor)
-          if (bgColor) {
-            doc.setFillColor(bgColor[0], bgColor[1], bgColor[2])
-            const textHeight = lineHeight * 1.2
-            doc.rect(x, currentY - textHeight + 2, maxWidth, textHeight, "F")
-          }
+
+      if (tagName === "div" && styles.backgroundColor) {
+        const bgColor = parseColor(styles.backgroundColor);
+        if (bgColor) {
+          doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+          const textHeight = lineHeight * 1.2;
+          doc.rect(x, yOffset - textHeight + 2, maxWidth, textHeight, "F");
         }
       }
-      for (let i = 0; i < node.childNodes.length; i++) {
-        processNode(node.childNodes[i])
+
+      for (let i = 0; i < element.childNodes.length; i++) {
+        const [newX, newY] = processNode(element.childNodes[i], xOffset, yOffset);
+        xOffset = newX;
+        yOffset = newY;
       }
+      
+      // Post-element spacing and style reset
       if (["h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "div"].includes(tagName)) {
-        currentY += styles.margin || 1
+        if (element.innerHTML.trim() !== '') {
+          yOffset += styles.margin || 2;
+        }
+        xOffset = x;
       }
-      doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0)
+
+      doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(0, 0, 0);
     }
-  }
+    return [xOffset, yOffset];
+  };
+
   for (let i = 0; i < container.childNodes.length; i++) {
-    processNode(container.childNodes[i])
+    const [_, newY] = processNode(container.childNodes[i], x, currentY);
+    currentY = newY;
   }
-  return currentY
+  return currentY;
 }
+
 
 const slugifyTestName = (name: string) =>
   name
