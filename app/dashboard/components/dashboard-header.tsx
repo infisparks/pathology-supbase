@@ -35,6 +35,8 @@ interface DashboardHeaderProps {
   isFilterContentMounted: boolean
   hospitalFilterTerm: string
   setHospitalFilterTerm: (term: string) => void
+  loadedDataStartDate?: string // Optional prop to display the start date of loaded data
+  loadedDataEndDate?: string // Optional prop to display the end date of loaded data
 }
 
 export function DashboardHeader({
@@ -57,6 +59,8 @@ export function DashboardHeader({
   isFilterContentMounted,
   hospitalFilterTerm,
   setHospitalFilterTerm,
+  loadedDataStartDate,
+  loadedDataEndDate,
 }: DashboardHeaderProps) {
   const filterContentRef = useRef<HTMLDivElement>(null)
 
@@ -144,6 +148,11 @@ export function DashboardHeader({
               <AdjustmentsHorizontalIcon className="h-4 w-4 mr-2 text-teal-600" />
               Filters & Search
             </h2>
+            {(startDate || endDate) && (
+              <p className="text-sm text-gray-500 ml-auto mr-4">
+                Displaying data from: {startDate} to {endDate}
+              </p>
+            )}
             {isFiltersExpanded ? (
               <ChevronUpIcon className="h-4 w-4 text-gray-500" />
             ) : (

@@ -17,6 +17,22 @@ import {
 import type { Registration, DashboardMetrics, PaymentHistory } from "./types/dashboard"
 
 /**
+ * Helper to get YYYY-MM-DD date string in Asia/Kolkata timezone
+ */
+function getKolkataDateString(date: string | Date = new Date()) {
+  const d = new Date(date)
+  const utc = d.getTime() + d.getTimezoneOffset() * 60000
+  const kolkataOffset = 5.5 * 3600000 // Asia/Kolkata is UTC+5:30
+  const kolkata = new Date(utc + kolkataOffset)
+
+  const year = kolkata.getFullYear()
+  const month = (kolkata.getMonth() + 1).toString().padStart(2, "0")
+  const day = kolkata.getDate().toString().padStart(2, "0")
+
+  return `${year}-${month}-${day}`
+}
+
+/**
  * Convert ISO (UTC) string to local datetime-local string (for <input type="datetime-local" />)
  */
 function toLocalInputValue(isoDateString?: string) {
@@ -76,7 +92,9 @@ export default function Dashboard() {
 
   const [isLoading, setIsLoading] = useState(true)
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  // Using Asia/Kolkata timezone for todayStr
+  const todayKolkata = getKolkataDateString(new Date().toISOString())
+  const todayStr = todayKolkata // YYYY-MM-DD
   const [startDate, setStartDate] = useState<string>(todayStr)
   const [endDate, setEndDate] = useState<string>(todayStr)
 
@@ -133,8 +151,8 @@ export default function Dashboard() {
   const fetchDashboardStats = useCallback(async () => {
     try {
       const today = new Date().toISOString().split("T")[0]
-      const start = startDate && startDate.trim() ? `${startDate}T00:00:00.000Z` : `${today}T00:00:00.000Z`
-      const end = endDate && endDate.trim() ? `${endDate}T23:59:59.999Z` : `${today}T23:59:59.999Z`
+      const kolkataStartOfDay = `${startDate || today}T00:00:00+05:30`
+      const kolkataEndOfDay = `${endDate || today}T23:59:59+05:30`
 
       // Fetch all registrations to calculate totals and pending reports accurately
       const { data: allRegistrationsData, error: allRegistrationsError } = await supabase
@@ -147,8 +165,8 @@ export default function Dashboard() {
         )
       `
         )
-        .gte("registration_time", start)
-        .lte("registration_time", end)
+        .gte("registration_time", kolkataStartOfDay)
+        .lte("registration_time", kolkataEndOfDay)
 
       if (allRegistrationsError) throw allRegistrationsError
 
@@ -257,8 +275,10 @@ export default function Dashboard() {
         .order("registration_time", { ascending: false })
 
       if (startDate && endDate) {
-        query = query.gte("registration_time", `${startDate}T00:00:00.000Z`)
-        query = query.lte("registration_time", `${endDate}T23:59:59.999Z`)
+        const kolkataStartOfDay = `${startDate}T00:00:00+05:30`
+        const kolkataEndOfDay = `${endDate}T23:59:59+05:30`
+        query = query.gte("registration_time", kolkataStartOfDay)
+        query = query.lte("registration_time", kolkataEndOfDay)
       }
 
       const { data, error } = await query
@@ -682,6 +702,8 @@ export default function Dashboard() {
             isFilterContentMounted={isFilterContentMounted}
             hospitalFilterTerm={hospitalFilterTerm}
             setHospitalFilterTerm={setHospitalFilterTerm}
+            loadedDataStartDate={startDate} // Pass the startDate to display
+            loadedDataEndDate={endDate} // Pass the endDate to display
           />
 
           <RegistrationList
